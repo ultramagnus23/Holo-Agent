@@ -3,13 +3,20 @@ name = "holoagent"
 version = "0.0.0"
 description = "Twin-in-the-loop reasoning agent for computational holography"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "torch",
+    "numpy",
+    "scipy",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+anthropic = ["anthropic"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: exercises live HoloForge compute (seconds-to-minutes); excluded from the default run"]
+addopts = "-m 'not slow'"
 
 [build-system]
 requires = ["setuptools>=68"]

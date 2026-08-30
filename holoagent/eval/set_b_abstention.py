@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from holoagent.orchestrator.orchestrator import EscalationTrigger
+from holoagent.orchestrator.escalation import EscalationTrigger
 
 _QUESTIONS_PATH = Path(__file__).parent / "questions" / "set_b.jsonl"
 
