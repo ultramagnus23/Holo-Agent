@@ -11,7 +11,11 @@ chains exactly that many, each depending on the previous run_id existing.
 
 import pytest
 
+import json
+
 import holoagent.tools  # noqa: F401  (registers T1-T12)
+from holoagent.eval._transcript import transcript_from_store
+from holoagent.eval.set_c_provenance_audit import audit_answer
 from holoagent.orchestrator.backend import ModelStep, ScriptedBackend, ToolCall
 from holoagent.orchestrator.orchestrator import Orchestrator
 from holoagent.provenance.store import ProvenanceStore
@@ -100,4 +104,26 @@ def test_orchestrator_chains_four_real_tool_calls_with_provenance(tmp_path):
         "get_sensitivity",
         "get_fit_quality",
     ]
+
+    # Set C, against the real transcript this run actually produced: a
+    # hand-authored answer citing REAL numbers from the run must pass; the
+    # same answer with one number swapped for a fabricated value must be
+    # caught. This is the check that enforces R1 -- prove it actually works
+    # against a real (not synthetic) provenance chain, not just unit tests.
+    transcript = transcript_from_store(store, query="Multi-step provenance smoke test (R6).", run_ids=answer.run_ids)
+    convergence_value = json.loads(rows[1]["outputs_json"])["value"]
+    fit_value = json.loads(rows[3]["outputs_json"])["value"]
+
+    real_answer = (
+        f"After {convergence_value['iterations_run']} iterations the PSNR reached "
+        f"{convergence_value['final_psnr']:.3f} dB. The literature fit gave "
+        f"NRMSE={fit_value['nrmse']:.4f} ({fit_value['quality']})."
+    )
+    assert audit_answer(real_answer, transcript) == []
+
+    fabricated_answer = real_answer.replace(f"{fit_value['nrmse']:.4f}", "0.999999")
+    violations = audit_answer(fabricated_answer, transcript)
+    assert len(violations) == 1
+    assert violations[0].token == "0.999999"
+
     store.close()

@@ -74,3 +74,27 @@ See `holoagent/physics/holoforge_adapter.py`'s `MEDIUM_PARAM_LITERATURE_BOUNDS`
 and `VALIDATED_K_RANGE_RAD_PER_UM`. Unlike T3/T7 (which call live HoloForge
 code), T8 has no automated link back to HoloForge — if those source docs
 change, T8 goes stale silently until someone re-checks it by hand.
+
+## Set C — status: implemented and tested (was previously a stubbed `NotImplementedError`)
+
+The numeric-token-matching rule (the design decision that blocked Set C —
+see `holoagent/eval/set_c_provenance_audit.py`'s old docstring) is decided
+and implemented; full rationale in
+[docs/set_c_matching_rule.md](set_c_matching_rule.md). Summary: a
+provenance pool built from tool outputs + tool call inputs + the user's
+own query, matched via exact / rounded-within-3%-relative-error / percent
+rules, deliberately biased toward flagging too much (unsupported unit
+conversions and derived arithmetic are flagged for human review, not
+silently allowed). `tests/test_set_c_provenance_audit.py` (11 fast unit
+tests) plus `tests/test_orchestrator_e2e.py` (proves it against a REAL
+provenance chain from live HoloForge: a hand-authored answer citing real
+run values passes, the same answer with one number swapped for a
+fabricated value is caught).
+
+One known gap, documented in `set_c_matching_rule.md` rather than papered
+over: HoloForge's own unlogged internal defaults (e.g. `MediumParams`
+fields a tool call didn't explicitly override) are not in the provenance
+pool, so an answer that states a default value by name will currently be
+flagged as a false-positive violation. Tracked as a tool-layer fix
+(T3/T6/T7 should surface their fully resolved parameters in
+`ToolResult.value`), not an audit-layer workaround.
