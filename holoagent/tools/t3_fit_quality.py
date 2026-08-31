@@ -11,6 +11,17 @@ poor at nrmse < 0.3 / 0.3-0.5 / >= 0.5) mirrors fit_literature_curves.py's
 own main(), which applies it ad hoc rather than as part of fit_curve's
 return value — replicated here so it's part of the typed result instead
 of left to the orchestrator to threshold itself.
+
+ToolResult.value includes resolved_base_medium_params -- every
+MediumParams field actually used as the fit's fixed starting point, not
+just base_medium_params' overrides (see t7_convergence_trace.py's
+docstring and docs/set_c_matching_rule.md for why this matters). Note
+thickness_um is a separate argument to fit_curve, not read from
+MediumParams.thickness -- resolved_base_medium_params.thickness reflects
+the dataclass default/override, which may differ from the thickness_um
+actually used in the simulation; both are in the provenance pool, and an
+answer should cite thickness_um, not resolved_base_medium_params.thickness,
+for what the fit actually used.
 """
 
 from __future__ import annotations
@@ -108,6 +119,7 @@ def get_fit_quality(
             "second_param_fit": result["second_param_fit"],
             "nrmse_spread": {"min": result["nrmse_min"], "max": result["nrmse_max"], "std": result["nrmse_std"]},
             "n_points": result["n_points"],
+            "resolved_base_medium_params": base_params_obj.__dict__,
         },
         units="nrmse: dimensionless (rmse / (y.max() - y.min()))",
         in_validated_region=validity["in_validated_region"],

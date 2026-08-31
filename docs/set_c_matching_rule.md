@@ -48,18 +48,20 @@ not just that it didn't match:
    being asked. Excluding them would make Set C fail on every answer that
    restates the user's own stated parameters back to them.
 
-Everything else is out of the pool. In particular: **HoloForge's own
-unlogged internal defaults are NOT in the pool.** If a tool call omits
-`sigma` and HoloForge's `MediumParams` dataclass default (0.08) is used
-internally, that 0.08 is not recorded anywhere unless the tool's
-`ToolResult.value` or the call's resolved arguments surface it explicitly.
-An answer that states "using the default sigma of 0.08" when the call
-only passed `{}` will currently be flagged as a violation. This is treated
-as a bug in the *tool*, not a gap to special-case around in the audit:
-if a computation depends on a value, that value belongs in the result,
-full stop. (Tracked as a follow-up: T3/T6/T7 should include their fully
-resolved `MediumParams` in `ToolResult.value`, not just the caller's
-literal overrides.)
+Everything else is out of the pool — with one thing that used to fall
+through and no longer does: **HoloForge's own unlogged internal defaults.**
+If a tool call omits `sigma`, HoloForge's `MediumParams` dataclass default
+(0.08) drives the computation whether or not the caller mentioned it. That
+value has to be recorded somewhere for an answer to legitimately cite it —
+otherwise a genuinely-computed number gets flagged as if it weren't. The
+fix lives in the tools, not the audit: T3, T6, and T7 each resolve
+`MediumParams(**overrides)` and include the full resolved dataclass as
+`resolved_medium_params` (T3: `resolved_base_medium_params`) inside
+`ToolResult.value`, so every field that actually drove the computation —
+overridden or defaulted — is in the pool. Set C never special-cases
+defaults; it just has a real record to check against now. Regression
+tests: `tests/test_tools_physics.py::test_t7_surfaces_resolved_defaults_even_with_empty_overrides`
+and the resolved-params assertions in the T3/T6 tests.
 
 ## Matching rules, in order of how much slack they grant
 

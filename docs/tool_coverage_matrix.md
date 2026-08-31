@@ -91,10 +91,9 @@ provenance chain from live HoloForge: a hand-authored answer citing real
 run values passes, the same answer with one number swapped for a
 fabricated value is caught).
 
-One known gap, documented in `set_c_matching_rule.md` rather than papered
-over: HoloForge's own unlogged internal defaults (e.g. `MediumParams`
-fields a tool call didn't explicitly override) are not in the provenance
-pool, so an answer that states a default value by name will currently be
-flagged as a false-positive violation. Tracked as a tool-layer fix
-(T3/T6/T7 should surface their fully resolved parameters in
-`ToolResult.value`), not an audit-layer workaround.
+The tool-layer defaults gap this surfaced (HoloForge's own unlogged
+`MediumParams` defaults weren't provenance-recorded, so an answer naming
+one would false-positive) is now fixed: T3/T6/T7 all include the fully
+resolved `MediumParams` in `ToolResult.value`
+(`resolved_medium_params`/`resolved_base_medium_params`), not just the
+caller's literal overrides. See `docs/set_c_matching_rule.md`.

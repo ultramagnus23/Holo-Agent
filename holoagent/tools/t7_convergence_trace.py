@@ -15,6 +15,13 @@ loss_history is logged every `log_every` iterations, not every iteration
 (HoloForge's own limitation — see holomedia/optimize.py). GS and LPC are
 closed-form: they return iterations_run=0 and an empty history, which is
 correct, not a failure.
+
+ToolResult.value includes resolved_medium_params — every MediumParams
+field actually used, not just the caller's overrides. Without this, an
+answer that names a value HoloForge defaulted silently (e.g. "using the
+default sigma of 0.08") has no provenance record to point to and gets
+wrongly flagged by Set C (docs/set_c_matching_rule.md) as ungrounded, even
+though it genuinely drove the computation.
 """
 
 from __future__ import annotations
@@ -83,7 +90,8 @@ def get_convergence_trace(
     input_hash = compute_input_hash(inputs)
 
     adapter = get_default_adapter()
-    recorder, bpm = adapter.build_recorder_and_bpm(medium_params, n_x, dx)
+    resolved_params = adapter.MediumParams(**(medium_params or {})).__dict__
+    recorder, bpm = adapter.build_recorder_and_bpm(resolved_params, n_x, dx)
     target = adapter.build_target(n_x, target_pattern, target_period_px)
     result = adapter.run_method(
         method_id=method_id,
@@ -96,7 +104,7 @@ def get_convergence_trace(
         dose_budget=dose_budget,
         log_every=log_every,
     )
-    validity = adapter.check_validity_region(medium_params)
+    validity = adapter.check_validity_region(resolved_params)
 
     diagnostic = None
     if not math.isfinite(result["psnr"]):
@@ -108,6 +116,7 @@ def get_convergence_trace(
             "iterations_run": result["iterations_run"],
             "early_stop_reason": result["early_stop_reason"],
             "final_psnr": result["psnr"],
+            "resolved_medium_params": resolved_params,
         },
         units="loss: scale-invariant MSE (si_mse); psnr: dB",
         in_validated_region=validity["in_validated_region"],

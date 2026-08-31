@@ -18,6 +18,12 @@ experiment tier does: one-at-a-time central finite-difference perturbation
 "autograd" — because presenting a finite-difference estimate as an exact
 derivative would be exactly the kind of confident-wrong number this whole
 system exists to prevent (PRD §1).
+
+ToolResult.value includes resolved_medium_params -- every MediumParams
+field actually used, not just base_medium_params' overrides -- so an
+answer naming an unspecified field's HoloForge default has provenance to
+point to (see t7_convergence_trace.py's docstring and
+docs/set_c_matching_rule.md for why this matters).
 """
 
 from __future__ import annotations
@@ -132,7 +138,7 @@ def get_sensitivity(
         diagnostic = f"non-finite output(s) at {non_finite} — derivative estimate is unreliable"
 
     return ToolResult(
-        value=result,
+        value={**result, "resolved_medium_params": resolved_params},
         units=f"d({output_quantity})/d({parameter}), finite-difference central estimate (NOT autograd)",
         in_validated_region=validity["in_validated_region"],
         distance_from_bounds=validity["distance_from_bounds"],

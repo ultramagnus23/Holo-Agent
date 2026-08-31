@@ -31,6 +31,18 @@ def test_t7_convergence_trace_real_run():
     assert result.diagnostic is None
 
 
+def test_t7_surfaces_resolved_defaults_even_with_empty_overrides():
+    # Regression test for the Set C false-positive gap: an answer naming a
+    # HoloForge default (e.g. "sigma=0.08") must have a provenance record
+    # to point to even when the caller passed medium_params={}.
+    fn = get_tool("get_convergence_trace").fn
+    result = fn(medium_params={}, n_iters=15, log_every=10, **_COMMON)
+    resolved = result.value["resolved_medium_params"]
+    assert resolved["sigma"] == 0.08
+    assert resolved["D0"] == 0.1
+    assert set(resolved) >= {"D0", "sigma", "kappa", "gamma", "dn_max", "k_bleach", "alpha_D", "shrinkage", "thickness", "n0"}
+
+
 def test_t7_closed_form_method_has_empty_history():
     fn = get_tool("get_convergence_trace").fn
     result = fn(medium_params={}, method_id="GS", n_x=64, dx=51.2 / 64, target_pattern="square_wave", seed=0)
@@ -66,6 +78,7 @@ def test_t6_sensitivity_returns_finite_difference_not_autograd():
     assert result.value["method"] == "finite_difference_central"
     assert "NOT autograd" in result.units
     assert math.isfinite(result.value["d_output_d_param"])
+    assert result.value["resolved_medium_params"]["sigma"] == 0.08
 
 
 def test_t6_missing_parameter_raises_structured_error():
@@ -88,3 +101,4 @@ def test_t3_fit_quality_real_fit():
     assert 0.0 <= result.value["nrmse"]
     assert result.value["quality"] in ("good", "moderate", "poor")
     assert result.units.startswith("nrmse")
+    assert result.value["resolved_base_medium_params"]["D0"] == 0.1
