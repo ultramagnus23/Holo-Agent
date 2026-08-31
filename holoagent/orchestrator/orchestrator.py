@@ -7,8 +7,12 @@ outputs. The system prompt in docs/orchestrator_system_prompt.md is a
 secondary guardrail only; Set C (TRD §7) is what actually enforces this.
 
 Model choice is a pluggable backend (holoagent.orchestrator.backend,
-ModelBackend protocol): hosted API in Phase 1, llama.cpp/GGUF local in
-Phase 2+. This module never hardcodes a provider.
+ModelBackend protocol). The default target is self-hosted/local
+(holoagent.orchestrator.ollama_backend.OllamaBackend) — not a hosted API
+key; see that module's docstring for why (hardware-driven, not the TRD's
+original Phase 1/2 split). This module never hardcodes a provider: it
+builds a provider-neutral Turn history (backend.Turn) and lets each
+backend translate to its own wire format.
 """
 
 from __future__ import annotations
@@ -17,7 +21,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from holoagent.orchestrator.backend import ModelBackend
+from holoagent.orchestrator.backend import (
+    AssistantToolCallTurn,
+    ModelBackend,
+    ToolResultTurn,
+    Turn,
+    UserTurn,
+)
 from holoagent.orchestrator.escalation import no_tool_exists, outside_validated_region, tool_errored
 
 # out_of_scope (trigger 4) is a router-level decision (TRD §1 layer 1), not
@@ -54,10 +64,10 @@ class Orchestrator:
         return _SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
 
     def _tool_specs(self) -> list[dict[str, Any]]:
-        """Anthropic-style tool spec shape (name/description/input_schema).
-        Other providers' backends are responsible for translating this if
-        their wire format differs — kept provider-neutral here since the
-        registry's JSON Schema is already provider-agnostic.
+        """Provider-neutral tool spec shape (name/description/input_schema).
+        Each backend translates this to its own wire format
+        (AnthropicBackend, OllamaBackend) since the registry's JSON Schema
+        itself is already provider-agnostic.
         """
         return [
             {"name": spec.name, "description": spec.description, "input_schema": spec.json_schema}
@@ -65,24 +75,22 @@ class Orchestrator:
         ]
 
     def answer(self, query: str) -> OrchestratorAnswer:
-        messages: list[dict[str, Any]] = [{"role": "user", "content": query}]
+        history: list[Turn] = [UserTurn(text=query)]
         tool_specs = self._tool_specs()
         parent_run_id: str | None = None
         run_ids: list[str] = []
         escalated = False
 
         for _ in range(self._max_steps):
-            step = self._model_backend.step(
-                [{"role": "system", "content": self.system_prompt}, *messages], tool_specs
-            )
+            step = self._model_backend.step(self.system_prompt, history, tool_specs)
 
             if not step.tool_calls:
                 if step.final_text is None:
                     raise RuntimeError("ModelBackend returned neither tool_calls nor final_text")
                 return OrchestratorAnswer(text=step.final_text, run_ids=run_ids, escalated=escalated)
 
-            messages.append({"role": "assistant", "content": [{"type": "tool_use", "calls": step.tool_calls}]})
-            tool_results: list[dict[str, Any]] = []
+            history.append(AssistantToolCallTurn(tool_calls=step.tool_calls))
+            tool_results: list[dict[str, str]] = []
 
             for call in step.tool_calls:
                 try:
@@ -90,7 +98,7 @@ class Orchestrator:
                 except KeyError:
                     escalated = True
                     tool_results.append(
-                        {"tool_call_id": call.id, "content": no_tool_exists(call.name, closest_tool=None)}
+                        {"tool_call_id": call.id, "text": no_tool_exists(call.name, closest_tool=None)}
                     )
                     continue
 
@@ -98,9 +106,7 @@ class Orchestrator:
                     result = spec.fn(**call.arguments)
                 except ToolError as exc:
                     escalated = True
-                    tool_results.append(
-                        {"tool_call_id": call.id, "content": tool_errored(call.name, str(exc))}
-                    )
+                    tool_results.append({"tool_call_id": call.id, "text": tool_errored(call.name, str(exc))})
                     continue
 
                 run_id = self._store.record(
@@ -109,22 +115,23 @@ class Orchestrator:
                 parent_run_id = run_id
                 run_ids.append(run_id)
 
-                content = (
+                text = (
                     f"run_id={run_id} value={result.value!r} units={result.units!r} "
                     f"in_validated_region={result.in_validated_region}"
                 )
                 if result.diagnostic:
-                    content += f" diagnostic={result.diagnostic!r}"
+                    text += f" diagnostic={result.diagnostic!r}"
                 if not result.in_validated_region:
                     escalated = True
-                    content += "\n" + outside_validated_region(
-                        result.distance_from_bounds, result.value.get("violations", result.value)
+                    violation_detail = (
+                        result.value.get("violations", result.value)
                         if isinstance(result.value, dict)
                         else result.value
                     )
-                tool_results.append({"tool_call_id": call.id, "content": content})
+                    text += "\n" + outside_validated_region(result.distance_from_bounds, violation_detail)
+                tool_results.append({"tool_call_id": call.id, "text": text})
 
-            messages.append({"role": "user", "content": tool_results})
+            history.append(ToolResultTurn(results=tool_results))
 
         raise RuntimeError(
             f"Orchestrator.answer: exceeded max_steps={self._max_steps} without a final answer "

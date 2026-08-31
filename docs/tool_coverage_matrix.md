@@ -33,19 +33,30 @@ module, and any deviation from the TRD's original description.
 **validity-bounded** — `in_validated_region` / `distance_from_bounds` are
 populated from a real check, not placeholder values.
 
-## Phase 1 gate — status: MET
+## Phase 1 gate — status: MET, including model-driven tool selection
 
 TRD §8 Phase 1 gate: "One real multi-step question answered end to end
 with full provenance." `tests/test_orchestrator_e2e.py` chains T8 → T7 →
 T6 → T3 (4 dependent tool calls, R6's minimum) through a real
 `Orchestrator.answer()` loop against live HoloForge, with every call
-recorded to `ProvenanceStore` and parent_run_id reconstructing the chain.
-The orchestrator's model backend is `ScriptedBackend` (a fixed script, not
-a live LLM) — no `ANTHROPIC_API_KEY` is available in this environment, so
-the *tool execution and provenance plumbing* is proven end to end, but
-*real tool selection by a model* is not yet exercised. That's the actual
-remaining Phase 1 gap: swap in `AnthropicBackend` (or any `ModelBackend`)
-with a real key and re-run Set A-style questions.
+recorded to `ProvenanceStore` and parent_run_id reconstructing the chain
+(that test still uses `ScriptedBackend` — a fixed script — since it's
+testing the tool-execution/provenance plumbing specifically, independent
+of any model's behavior).
+
+The remaining gap noted in the previous version of this doc — no model had
+actually chosen a tool — is closed:
+`tests/test_ollama_backend_live.py::test_real_local_model_selects_and_calls_a_real_tool`
+runs a real self-hosted model (`qwen2.5:7b-instruct` via Ollama) through
+`Orchestrator.answer()`, and the model correctly selects and calls
+`check_validity_region` for a validity question, with the resulting run
+recorded in the provenance store. See
+`holoagent/orchestrator/ollama_backend.py` for the backend and why it's
+Ollama/qwen2.5-instruct rather than the TRD's own Phase 1/2 picks (hosted
+API, then DeepSeek-V4-Flash) — this project runs self-hosted with no
+hosted API key, and the TRD's local-model pick assumed hardware (500GB
+disk, implicitly enough VRAM to matter) this dev machine doesn't have (4GB
+VRAM laptop GPU).
 
 ## Two corrections to the TRD surfaced while wiring T6 and T8
 
