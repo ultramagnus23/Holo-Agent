@@ -37,22 +37,32 @@ for the provenance-audit design.
 - T1/T2/T4/T5/T9/T10/T11/T12 remain Phase 2 stubs (`NotImplementedError`).
 - Router (Tier A/B/C classification) remains a Phase 2 stub — not required
   for the Phase 1 gate.
-- **Set A: seeded with 22 real questions, mined from HoloForge's own
-  development history** (`holoagent/eval/questions/set_a.jsonl`) — not
-  invented. Every entry cites `evidence`: a specific commit or doc/comment
-  in the HoloForge repo where the question was genuinely asked and
-  answered during Part 2 work (e.g. "does {kappa,D0} or {kappa,dn_max}
-  better fit the growth_dn curves" from the real dn_max citation-scoping
-  bug). 3 of the 22 are `status: "reproduced"` — re-run live this session
-  against the actual digitized literature data, with fresh run_ids, not
-  just the historical numbers quoted. The other 19 are
-  `documented_historical` (real findings, not independently re-run yet) or
-  `needs_phase_2_tool` (genuinely need T9/T1/T2/T10, not yet wired). Set A
-  *grading* (`run_set_a`) is still not implemented — it needs a real
-  `ModelBackend` run over these questions compared against
-  `reference_values`, which only the 3 "reproduced" entries currently have.
-  `tests/test_set_a_questions.py` enforces the structural honesty rules
-  (every question has real evidence, every named tool actually exists).
+- **Set A: 51 real questions, mined from HoloForge's own development
+  history** (`holoagent/eval/questions/set_a.jsonl`) — not invented. Every
+  entry cites `evidence`: a specific commit or doc/comment in the
+  HoloForge repo where the question was genuinely asked and answered
+  during Part 2 work (dn_max citation-scoping bug, unphysical-oracle
+  regression, K-grid realizability bug, RCWA-vs-Kogelnik validity
+  boundary, config_hash collision risks, and more — two independent Explore
+  passes over commits, `docs/*.md`, `analysis/*.py`, and test docstrings).
+  **6 are `status: "reproduced"`** — re-run live this session against real
+  digitized literature CSVs and real HoloForge medium configs, with fresh
+  run_ids: e.g. q01's post-fix fit (NRMSE 0.286, inside the documented
+  0.17-0.29 range) sits alongside q47's *pre-fix* fit on the exact same
+  data (NRMSE 0.874, right at the documented 0.68-0.87 range's edge,
+  D0_fit blown out to 37.5 — a physically absurd compensation for the
+  real culprit, dn_max, not being free); q07 independently fits both
+  digitized Bruder series and gets a 2.70x dn_max disagreement, matching
+  the historically documented "2.7x" almost exactly. The rest are honestly
+  split: `documented_historical` (real findings, not independently re-run)
+  or `needs_phase_2_tool` (genuinely need T9/T1/T2/T4/T10/T11/T12, not yet
+  wired — most of the S1/S2 ablation and multi-job sweep questions land
+  here). Set A *grading* (`run_set_a`) is still not implemented — it needs
+  a real `ModelBackend` run over these questions compared against
+  `reference_values`, which only the 6 "reproduced" entries currently
+  have. `tests/test_set_a_questions.py` enforces the structural honesty
+  rules (every question has real evidence, every named tool actually
+  exists in the registry).
 - Set B (adversarial abstention, TRD §7) is still empty.
 
 ## Layout
