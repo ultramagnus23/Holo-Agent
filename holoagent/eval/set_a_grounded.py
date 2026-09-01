@@ -74,6 +74,7 @@ class SetAResult:
     expected_tools_satisfied: bool  # expected_tools subset of tools_called (order not enforced)
     provenance_violations: int  # from Set C's audit_answer against this session's REAL transcript
     escalated: bool  # Orchestrator's own escalated flag (hit a no-tool/error/out-of-region trigger)
+    validator_blocked: bool  # runtime evidence validator refused the model's draft (master-prompt §3)
     answer_text: str
     error: str | None = None
 
@@ -116,6 +117,7 @@ def grade_question(orchestrator: Orchestrator, store: ProvenanceStore, question:
             expected_tools_satisfied=False,
             provenance_violations=-1,
             escalated=False,
+            validator_blocked=False,
             answer_text="",
             error=repr(exc),
         )
@@ -140,6 +142,7 @@ def grade_question(orchestrator: Orchestrator, store: ProvenanceStore, question:
         expected_tools_satisfied=expected_satisfied,
         provenance_violations=len(violations),
         escalated=answer.escalated,
+        validator_blocked=answer.validator_blocked,
         answer_text=answer.text,
     )
 

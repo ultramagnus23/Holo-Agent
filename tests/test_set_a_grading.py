@@ -66,7 +66,12 @@ def test_grade_question_fails_expected_tools_when_wrong_tool_called(tmp_path):
     store.close()
 
 
-def test_grade_question_flags_provenance_violation_on_fabricated_number(tmp_path):
+def test_grade_question_reports_runtime_validator_block_on_fabricated_number(tmp_path):
+    """The runtime evidence-validator gate (orchestrator.py's
+    _validate_and_finalize, master-prompt §3) now blocks a fabricated draft
+    BEFORE grade_question ever sees it -- so grade_question's own post-hoc
+    Set C audit legitimately finds 0 violations on the (blocked) returned
+    text. What grade_question must surface instead is validator_blocked."""
     store = ProvenanceStore(tmp_path / "runs.sqlite3")
     script = [
         ModelStep(
@@ -80,7 +85,8 @@ def test_grade_question_flags_provenance_violation_on_fabricated_number(tmp_path
 
     result = grade_question(orchestrator, store, _question())
 
-    assert result.provenance_violations >= 1
+    assert result.validator_blocked is True
+    assert "The efficiency is 42.0 percent" not in result.answer_text
     store.close()
 
 

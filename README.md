@@ -121,6 +121,47 @@ for the provenance-audit design.
   All of this was found and fixed against the real live model, not
   discovered later — 5 passed, 1 documented xfail, 341s.
 
+## Runtime evidence validator (the master-prompt's "Hard Scientific Safety Rule")
+
+Set C used to be an offline audit only — something Set A/B grading and CI
+ran *after the fact*. It's now also a **runtime gate**: every draft final
+answer the orchestrator produces is checked against Set C's audit
+*before it can reach the caller*
+(`Orchestrator._validate_and_finalize`, `holoagent/orchestrator/orchestrator.py`).
+If the draft contains a numeric claim not grounded in that session's real
+provenance, the orchestrator refuses to return it — deterministically, no
+extra model call — and returns a fixed abstention message instead, citing
+which token(s) were unsupported. The block itself is provenance-recorded
+(`ProvenanceStore.record_validator_block`), so "the validator fired" is
+itself an auditable event, not a side effect.
+
+This is a structural fix, not a bigger prompt: a fabricated number cannot
+reach the user even when the model ignores its system prompt — which
+happened, live, during Set B testing (`qwen2.5:7b-instruct` computed a
+Brewster angle unprompted right after correctly declining the question in
+prose). Design choice: **block-and-abstain, not block-and-regenerate** —
+retrying against the same 7B model that just demonstrated it doesn't
+reliably self-correct on this exact rule isn't a safe default, and
+abstention is explicitly licensed as an alternative in the spec this was
+built against. See `tests/test_evidence_validator.py`.
+
+## Master-build scope note
+
+A later, much larger design document ("MASTER BUILD PROMPT") asked for
+HoloAgent to become a general-purpose computational-optics research
+platform — a plugin architecture separating agent core from domain tools,
+a full general wave-optics/Fourier-optics/imaging/phase-retrieval tool
+library validated against analytic reference cases, a claim validator
+beyond numeric tokens, research sessions, and automatic hypothesis
+testing. That document's own §37 says not to build it all at once. What's
+implemented from it so far: the runtime evidence-validator gate above
+(its §3, the most architecturally significant single gap). Everything
+else it describes — Milestones 2 through 8 — is genuinely a multi-month
+undertaking, not a same-session extension, and is not started. Treat the
+"Status" section above as the accurate current state; do not infer a
+general optics platform exists from that document's presence in this
+repo's history.
+
 ## Layout
 
 ```

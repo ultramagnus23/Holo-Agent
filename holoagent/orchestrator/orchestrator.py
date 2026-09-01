@@ -28,11 +28,18 @@ from holoagent.orchestrator.backend import (
     Turn,
     UserTurn,
 )
-from holoagent.orchestrator.escalation import no_tool_exists, outside_validated_region, tool_errored
+from holoagent.orchestrator.escalation import (
+    evidence_validator_blocked,
+    no_tool_exists,
+    outside_validated_region,
+    tool_errored,
+)
 
 # out_of_scope (trigger 4) is a router-level decision (TRD §1 layer 1), not
 # something the tool-execution loop below discovers — it belongs in
 # holoagent.router once Tier A/B/C classification exists (TRD §8 Phase 2).
+from holoagent.eval._transcript import transcript_from_store
+from holoagent.eval.set_c_provenance_audit import audit_answer
 from holoagent.provenance.store import ProvenanceStore
 from holoagent.tools.contract import ToolError
 from holoagent.tools.registry import ToolSpec, get_tool, list_tools
@@ -46,6 +53,7 @@ class OrchestratorAnswer:
     run_ids: list[str] = field(default_factory=list)  # successful, result-bearing calls, in call order
     error_run_ids: list[str] = field(default_factory=list)  # failed calls (ProvenanceStore.record_error), in call order
     escalated: bool = False  # True iff any tool call hit an escalation trigger
+    validator_blocked: bool = False  # True iff the runtime evidence validator refused the model's draft (master-prompt §3)
 
 
 class Orchestrator:
@@ -75,6 +83,49 @@ class Orchestrator:
             for spec in self._tools
         ]
 
+    def _validate_and_finalize(
+        self,
+        draft_text: str,
+        *,
+        query: str,
+        run_ids: list[str],
+        error_run_ids: list[str],
+        escalated: bool,
+        parent_run_id: str | None,
+    ) -> OrchestratorAnswer:
+        """The runtime evidence-validator gate (master-prompt §3: "Hard
+        Scientific Safety Rule" -- do not rely solely on the system prompt).
+        Every draft final answer is checked against Set C (the same audit
+        used offline for Sets A/B/C) BEFORE it can reach the caller. This is
+        deliberately block-and-abstain, not block-and-regenerate: retrying
+        against the same model risks looping (and this project has already
+        measured, live, that a 7B local model does not reliably self-correct
+        on this exact rule -- see tests/test_set_b_live_grading.py's
+        documented Brewster-angle xfail). Abstention is explicitly permitted
+        as an alternative to regeneration in the master prompt's own wording
+        ("regenerate or produce an abstention"), and it's the deterministic,
+        testable, zero-extra-model-call option.
+        """
+        transcript = transcript_from_store(self._store, query, run_ids, error_run_ids)
+        violations = audit_answer(draft_text, transcript)
+
+        if not violations:
+            return OrchestratorAnswer(
+                text=draft_text, run_ids=run_ids, error_run_ids=error_run_ids, escalated=escalated
+            )
+
+        unsupported_tokens = [v.token for v in violations]
+        block_run_id = self._store.record_validator_block(
+            draft_text=draft_text, unsupported_tokens=unsupported_tokens, parent_run_id=parent_run_id
+        )
+        return OrchestratorAnswer(
+            text=evidence_validator_blocked(unsupported_tokens, block_run_id),
+            run_ids=run_ids,
+            error_run_ids=[*error_run_ids, block_run_id],
+            escalated=True,
+            validator_blocked=True,
+        )
+
     def answer(self, query: str) -> OrchestratorAnswer:
         history: list[Turn] = [UserTurn(text=query)]
         tool_specs = self._tool_specs()
@@ -89,8 +140,13 @@ class Orchestrator:
             if not step.tool_calls:
                 if step.final_text is None:
                     raise RuntimeError("ModelBackend returned neither tool_calls nor final_text")
-                return OrchestratorAnswer(
-                    text=step.final_text, run_ids=run_ids, error_run_ids=error_run_ids, escalated=escalated
+                return self._validate_and_finalize(
+                    step.final_text,
+                    query=query,
+                    run_ids=run_ids,
+                    error_run_ids=error_run_ids,
+                    escalated=escalated,
+                    parent_run_id=parent_run_id,
                 )
 
             history.append(AssistantToolCallTurn(tool_calls=step.tool_calls))

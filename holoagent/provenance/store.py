@@ -103,6 +103,29 @@ class ProvenanceStore:
         self._conn.commit()
         return run_id
 
+    def record_validator_block(
+        self,
+        *,
+        draft_text: str,
+        unsupported_tokens: list[str],
+        parent_run_id: str | None = None,
+    ) -> str:
+        """Persist a runtime evidence-validator block: the orchestrator drafted
+        an answer, found it contained numeric claims not grounded in this
+        session's provenance, and refused to return it (master-prompt §3:
+        "the system must... block the answer... record the violation").
+        Reuses the same `runs` table as record_error (tool="_evidence_validator")
+        rather than a new table, since this is structurally the same thing --
+        a provenance-worthy event with no successful ToolResult -- and every
+        existing query/get path already works on it for free.
+        """
+        return self.record_error(
+            tool="_evidence_validator",
+            inputs={"draft_text": draft_text},
+            error_text=f"blocked {len(unsupported_tokens)} unsupported numeric claim(s): {unsupported_tokens}",
+            parent_run_id=parent_run_id,
+        )
+
     def find_cached(self, input_hash: str) -> dict | None:
         """R5 / TRD §5.2: identical input_hash short-circuits re-computation."""
         row = self._conn.execute(

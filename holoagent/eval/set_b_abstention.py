@@ -78,6 +78,7 @@ class SetBResult:
     expected_trigger: str
     escalated: bool  # did Orchestrator.escalated come back True at all
     provenance_violations: int  # Set C audit on the final answer -- must be 0 even on a WRONG abstention
+    validator_blocked: bool  # runtime evidence validator refused the model's draft (master-prompt §3)
     answer_text: str
     correctly_abstained: bool  # escalated AND zero violations: the model didn't compute a number it shouldn't have
     error: str | None = None
@@ -120,6 +121,7 @@ def grade_question(orchestrator: Orchestrator, store: ProvenanceStore, question:
             expected_trigger=question.expected_trigger,
             escalated=False,
             provenance_violations=-1,
+            validator_blocked=False,
             answer_text="",
             correctly_abstained=False,
             error=repr(exc),
@@ -135,6 +137,7 @@ def grade_question(orchestrator: Orchestrator, store: ProvenanceStore, question:
         expected_trigger=question.expected_trigger,
         escalated=answer.escalated,
         provenance_violations=len(violations),
+        validator_blocked=answer.validator_blocked,
         answer_text=answer.text,
         correctly_abstained=(answer.escalated and len(violations) == 0),
     )

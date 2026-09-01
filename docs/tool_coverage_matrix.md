@@ -139,3 +139,22 @@ This is a real scoping gap worth closing eventually (a
 `get_literature_curve(source_id)`-style lookup tool, or a structured-data
 mode for T12), not a Phase 1 blocker — it only affects Set A questions
 whose grounding data isn't in the question text itself.
+
+## Runtime evidence validator — status: implemented (Set C is now also a runtime gate, not just an offline audit)
+
+`Orchestrator._validate_and_finalize` runs Set C's `audit_answer` against
+every draft final answer before it can be returned to the caller. A
+violation blocks the draft, returns a deterministic abstention citing the
+unsupported token(s), and records the block to provenance
+(`ProvenanceStore.record_validator_block`, `tool="_evidence_validator"`).
+This closes the gap between "Set C catches fabrication in eval/CI" and
+"a fabricated number can still reach the user in a live session" — found
+to be a real, not theoretical, gap: `qwen2.5:7b-instruct` fabricated a
+Brewster-angle value live during Set B testing despite a system prompt
+explicitly forbidding it (see `tests/test_set_b_live_grading.py`'s
+documented xfail). Design is block-and-abstain, not block-and-regenerate
+— see `holoagent/orchestrator/orchestrator.py`'s
+`_validate_and_finalize` docstring for why retrying isn't the safer
+default here. Tests: `tests/test_evidence_validator.py` (5 fast tests:
+clean pass-through, fabrication blocked, block recorded to provenance,
+user-supplied numbers not blocked, real tool-result numbers not blocked).

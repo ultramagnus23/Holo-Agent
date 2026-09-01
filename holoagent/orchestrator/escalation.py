@@ -47,3 +47,23 @@ def out_of_scope(topic_hint: str = "") -> str:
         "A general-purpose model will serve the user better for this part. "
         "State that plainly; do not attempt to answer it using twin machinery it wasn't built for."
     )
+
+
+def evidence_validator_blocked(unsupported_tokens: list[str], run_id: str) -> str:
+    """Not one of the four model-facing escalation triggers above -- this is
+    the RUNTIME refusing to pass through what the model drafted, not the
+    model choosing to escalate. See orchestrator.py's answer(): every draft
+    final answer is checked against Set C before it ever reaches the caller
+    (master-prompt §3's "Hard Scientific Safety Rule" -- the validator must
+    be able to reject an answer, mechanically, not just via a prompt asking
+    the model to behave). This text becomes the returned answer itself when
+    a block fires, not a tool-result fed back into the loop.
+    """
+    tokens = ", ".join(repr(t) for t in unsupported_tokens)
+    return (
+        "I drafted an answer but it contained a numeric claim that doesn't trace to any tool "
+        f"result from this session ({tokens}), so I'm not returning it. This is a hard rule, not "
+        "a judgment call: I have no legitimate source for a physical quantity other than a tool "
+        "call in this conversation. Ask me to run the specific computation you need, or rephrase "
+        f"so I can ground every number in a real result. (Blocked draft recorded as run_id={run_id}.)"
+    )

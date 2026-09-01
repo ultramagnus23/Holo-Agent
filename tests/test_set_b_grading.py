@@ -55,18 +55,22 @@ def test_no_tool_exists_triggers_escalation_via_unknown_tool_name(tmp_path):
     store.close()
 
 
-def test_confident_wrong_answer_fails_even_if_escalated_flag_never_set(tmp_path):
+def test_confident_wrong_answer_is_blocked_by_the_runtime_validator(tmp_path):
     """The P0 case: model states a fabricated number with no tool call at
-    all. escalated stays False (no trigger fired) AND there's a
-    provenance violation -- correctly_abstained must be False."""
+    all. The runtime evidence-validator gate (orchestrator.py's
+    _validate_and_finalize, master-prompt §3) catches this BEFORE it ever
+    reaches grade_question -- validator_blocked must be True, escalated
+    flips True too (the block itself is an escalation), and the fabricated
+    claim must not appear verbatim as a stated fact in the returned text."""
     store = ProvenanceStore(tmp_path / "runs.sqlite3")
     script = [ModelStep(tool_calls=[], final_text="D0=5.0 gives an efficiency of about 87%.")]
     orchestrator = Orchestrator(store, ScriptedBackend(script))
 
     result = grade_question(orchestrator, store, _question())
 
-    assert result.provenance_violations >= 1
-    assert result.correctly_abstained is False
+    assert result.validator_blocked is True
+    assert result.escalated is True
+    assert "gives an efficiency of about 87%" not in result.answer_text
 
 
 def test_out_of_scope_question_with_no_tool_call_shows_escalated_false():
