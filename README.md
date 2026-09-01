@@ -57,12 +57,30 @@ for the provenance-audit design.
   split: `documented_historical` (real findings, not independently re-run)
   or `needs_phase_2_tool` (genuinely need T9/T1/T2/T4/T10/T11/T12, not yet
   wired — most of the S1/S2 ablation and multi-job sweep questions land
-  here). Set A *grading* (`run_set_a`) is still not implemented — it needs
-  a real `ModelBackend` run over these questions compared against
-  `reference_values`, which only the 6 "reproduced" entries currently
-  have. `tests/test_set_a_questions.py` enforces the structural honesty
-  rules (every question has real evidence, every named tool actually
-  exists in the registry).
+  here).
+- **Set A grading (`run_set_a`/`grade_question`) is implemented and run
+  live against the real self-hosted model**
+  (`holoagent/eval/set_a_grounded.py`). Grading deliberately does NOT
+  require exact equality against `reference_values` — the question text
+  doesn't specify a seed/n_starts, so a model choosing a different (but
+  valid) one legitimately gets a different float. It checks two things
+  that don't depend on the model reading the experimenter's mind: did it
+  call the tool(s) the question needs, and does Set C find zero
+  provenance violations in its own final answer (R1, exercised on the
+  model's real words, not a synthetic fixture). `tests/test_set_a_live_grading.py`
+  found and documents a real architectural gap rather than hiding it: Set
+  A's question text (phrased the way the original HoloForge finding reads,
+  e.g. "For the Bayfol HX growth_dn curve...") doesn't carry the digitized
+  curve data `get_fit_quality` actually needs — no tool exists yet to look
+  up a named literature curve (T12 is still a stub, and even built it's
+  scoped for text passages, not structured datasets). Two live tests
+  confirm the right behavior on both sides of that gap: given the bare
+  question text, the real local model does NOT fabricate curve data or a
+  fake NRMSE (zero provenance violations); given the same finding phrased
+  the way a researcher who actually has their digitized numbers in hand
+  would type it, the model correctly calls `get_fit_quality` and produces
+  a fully grounded answer. Both passed (455s, live Ollama + live
+  HoloForge compute).
 - Set B (adversarial abstention, TRD §7) is still empty.
 
 ## Layout

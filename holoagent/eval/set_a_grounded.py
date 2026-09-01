@@ -35,6 +35,11 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from holoagent.eval._transcript import transcript_from_store
+from holoagent.eval.set_c_provenance_audit import audit_answer
+from holoagent.orchestrator.orchestrator import Orchestrator
+from holoagent.provenance.store import ProvenanceStore
+
 _QUESTIONS_PATH = Path(__file__).parent / "questions" / "set_a.jsonl"
 
 
@@ -61,13 +66,85 @@ def load_questions() -> list[SetAQuestion]:
     return questions
 
 
-def run_set_a(questions: list[SetAQuestion]) -> None:
-    raise NotImplementedError(
-        "Set A grading not yet implemented -- needs a real ModelBackend driving "
-        "Orchestrator.answer() over these questions and comparing tool selection + "
-        "numeric output against reference_values. Only 'reproduced' questions have "
-        "reference_values to grade against today; 'documented_historical' entries "
-        "need their reference computed the same way question 1 was (see git history "
-        "for the pattern) before they're gradable; 'needs_phase_2_tool' entries are "
-        "not gradable until their tool exists."
+@dataclass(frozen=True)
+class SetAResult:
+    question_id: str
+    question_status: str  # carried through from the question (reproduced/documented_historical/needs_phase_2_tool)
+    tools_called: list[str]  # in call order
+    expected_tools_satisfied: bool  # expected_tools subset of tools_called (order not enforced)
+    provenance_violations: int  # from Set C's audit_answer against this session's REAL transcript
+    escalated: bool  # Orchestrator's own escalated flag (hit a no-tool/error/out-of-region trigger)
+    answer_text: str
+    error: str | None = None
+
+
+def grade_question(orchestrator: Orchestrator, store: ProvenanceStore, question: SetAQuestion) -> SetAResult:
+    """Grades one question against a real orchestrator run.
+
+    What "correct" means here is narrower than the TRD §7 description
+    ("numeric match against a hand-computed reference") on purpose: the
+    question text alone doesn't specify a seed, n_starts, or grid
+    resolution, so the model choosing e.g. a different (but equally valid)
+    seed than the one reference_values was computed with will legitimately
+    produce a different float -- exact equality would fail runs that did
+    nothing wrong. Grading instead checks two things that don't depend on
+    the model reading the experimenter's mind:
+
+    1. expected_tools_satisfied -- did the model call the tool(s) the
+       question actually needs, at all.
+    2. provenance_violations == 0 -- does every numeric claim in the
+       model's own final answer trace to a REAL tool result from THIS run
+       (Set C's audit, against the real provenance chain this call
+       produced, not a synthetic fixture). This is the check that matters
+       most: it's R1 exercised end to end, on the model's own words, not
+       just on hand-authored test strings (contrast with
+       tests/test_set_c_provenance_audit.py's synthetic transcripts and
+       tests/test_orchestrator_e2e.py's ScriptedBackend transcript).
+
+    For `needs_phase_2_tool` questions, expected_tools_satisfied will
+    correctly come back False (the tool doesn't exist to call) -- the
+    right outcome there is Orchestrator.escalated=True with a
+    no-tool-exists response (PRD §6 trigger 1), not a failed attempt.
+    """
+    try:
+        answer = orchestrator.answer(question.question)
+    except Exception as exc:  # noqa: BLE001 -- a grading harness must not let one bad question kill the run
+        return SetAResult(
+            question_id=question.id,
+            question_status=question.status,
+            tools_called=[],
+            expected_tools_satisfied=False,
+            provenance_violations=-1,
+            escalated=False,
+            answer_text="",
+            error=repr(exc),
+        )
+
+    tools_called = []
+    for run_id in answer.run_ids:
+        row = store.get(run_id)
+        if row is not None:
+            tools_called.append(row["tool"])
+
+    expected_satisfied = (
+        set(question.expected_tools).issubset(set(tools_called)) if question.expected_tools else True
     )
+
+    transcript = transcript_from_store(store, question.question, answer.run_ids)
+    violations = audit_answer(answer.text, transcript)
+
+    return SetAResult(
+        question_id=question.id,
+        question_status=question.status,
+        tools_called=tools_called,
+        expected_tools_satisfied=expected_satisfied,
+        provenance_violations=len(violations),
+        escalated=answer.escalated,
+        answer_text=answer.text,
+    )
+
+
+def run_set_a(
+    questions: list[SetAQuestion], orchestrator: Orchestrator, store: ProvenanceStore
+) -> list[SetAResult]:
+    return [grade_question(orchestrator, store, q) for q in questions]

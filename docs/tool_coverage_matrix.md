@@ -108,3 +108,34 @@ one would false-positive) is now fixed: T3/T6/T7 all include the fully
 resolved `MediumParams` in `ToolResult.value`
 (`resolved_medium_params`/`resolved_base_medium_params`), not just the
 caller's literal overrides. See `docs/set_c_matching_rule.md`.
+
+## Set A grading — status: implemented and run live (was previously a stubbed `NotImplementedError`)
+
+`grade_question`/`run_set_a` in `holoagent/eval/set_a_grounded.py` grades
+a real `Orchestrator.answer()` run on two checks that don't require the
+model to guess an unstated seed/config: `expected_tools_satisfied` (did it
+call the tool(s) the question needs) and `provenance_violations == 0`
+(Set C's audit, run against the REAL provenance chain that answer
+produced — not a synthetic fixture). `tests/test_set_a_grading.py` covers
+the grading logic itself with `ScriptedBackend` (fast, deterministic).
+
+`tests/test_set_a_live_grading.py` runs this against the real self-hosted
+model and surfaces a genuine architectural gap rather than hiding it: Set
+A's question text is phrased the way the original HoloForge finding
+reads (e.g. q01: "For the Bayfol HX growth_dn curve (K=8.98 rad/um),
+does fitting {kappa, dn_max}...") — it does NOT carry the digitized (x,y)
+curve data `get_fit_quality` actually requires as input, and no tool in
+the current registry can look up a named literature curve by source (T12
+is still a stub, and even built is scoped for text-passage retrieval, not
+structured datasets). Both sides of this gap are tested and pass live
+(455s): given the bare question text, the model does not fabricate curve
+data or an invented NRMSE (zero provenance violations — it recognizes it
+can't answer rather than guessing); given the same finding phrased the
+way a researcher who actually has their digitized numbers in hand would
+type it, the model correctly calls `get_fit_quality` and produces a fully
+grounded answer.
+
+This is a real scoping gap worth closing eventually (a
+`get_literature_curve(source_id)`-style lookup tool, or a structured-data
+mode for T12), not a Phase 1 blocker — it only affects Set A questions
+whose grounding data isn't in the question text itself.
