@@ -24,7 +24,7 @@ unlike T3/T7 which call live code.
 from __future__ import annotations
 
 from holoagent.physics import get_default_adapter
-from holoagent.tools._util import compute_input_hash, new_run_id
+from holoagent.tools._util import call_adapter, compute_input_hash, new_run_id
 from holoagent.tools.contract import ToolResult
 from holoagent.tools.registry import register
 
@@ -55,7 +55,9 @@ def check_validity_region(medium_params: dict, K_rad_per_um: float | None = None
     input_hash = compute_input_hash(inputs)
 
     adapter = get_default_adapter()
-    result = adapter.check_validity_region(medium_params, K_rad_per_um=K_rad_per_um)
+    result = call_adapter(
+        "check_validity_region", adapter.check_validity_region, medium_params, K_rad_per_um=K_rad_per_um
+    )
 
     violations = {name: {"value": value, "bounds": bounds} for name, (value, bounds) in result["violations"].items()}
 

@@ -43,7 +43,8 @@ _SYSTEM_PROMPT_PATH = Path(__file__).parent.parent.parent / "docs" / "orchestrat
 @dataclass(frozen=True)
 class OrchestratorAnswer:
     text: str
-    run_ids: list[str] = field(default_factory=list)  # provenance chain, in call order
+    run_ids: list[str] = field(default_factory=list)  # successful, result-bearing calls, in call order
+    error_run_ids: list[str] = field(default_factory=list)  # failed calls (ProvenanceStore.record_error), in call order
     escalated: bool = False  # True iff any tool call hit an escalation trigger
 
 
@@ -79,6 +80,7 @@ class Orchestrator:
         tool_specs = self._tool_specs()
         parent_run_id: str | None = None
         run_ids: list[str] = []
+        error_run_ids: list[str] = []
         escalated = False
 
         for _ in range(self._max_steps):
@@ -87,7 +89,9 @@ class Orchestrator:
             if not step.tool_calls:
                 if step.final_text is None:
                     raise RuntimeError("ModelBackend returned neither tool_calls nor final_text")
-                return OrchestratorAnswer(text=step.final_text, run_ids=run_ids, escalated=escalated)
+                return OrchestratorAnswer(
+                    text=step.final_text, run_ids=run_ids, error_run_ids=error_run_ids, escalated=escalated
+                )
 
             history.append(AssistantToolCallTurn(tool_calls=step.tool_calls))
             tool_results: list[dict[str, str]] = []
@@ -106,7 +110,37 @@ class Orchestrator:
                     result = spec.fn(**call.arguments)
                 except ToolError as exc:
                     escalated = True
-                    tool_results.append({"tool_call_id": call.id, "text": tool_errored(call.name, str(exc))})
+                    error_text = str(exc)
+                    error_run_id = self._store.record_error(
+                        tool=call.name, inputs=call.arguments, error_text=error_text, parent_run_id=parent_run_id
+                    )
+                    parent_run_id = error_run_id
+                    error_run_ids.append(error_run_id)
+                    tool_results.append(
+                        {"tool_call_id": call.id, "text": f"run_id={error_run_id} " + tool_errored(call.name, error_text)}
+                    )
+                    continue
+                except Exception as exc:  # noqa: BLE001
+                    # Catches everything call_adapter's ToolError-wrapping
+                    # doesn't: a still-stubbed tool's own NotImplementedError
+                    # (T1/T2/T4/T5/T9-T12 raise this directly, not via
+                    # call_adapter), and a malformed call (TypeError for a
+                    # missing/unexpected argument -- the model's own mistake,
+                    # not HoloForge's). Either way, a single bad tool call
+                    # must feed back into the loop as a self-describing
+                    # failure, never crash Orchestrator.answer() entirely --
+                    # found live via Set B (b01/b14) crashing the whole
+                    # session on exactly these two cases.
+                    escalated = True
+                    error_text = f"{type(exc).__name__}: {exc}"
+                    error_run_id = self._store.record_error(
+                        tool=call.name, inputs=call.arguments, error_text=error_text, parent_run_id=parent_run_id
+                    )
+                    parent_run_id = error_run_id
+                    error_run_ids.append(error_run_id)
+                    tool_results.append(
+                        {"tool_call_id": call.id, "text": f"run_id={error_run_id} " + tool_errored(call.name, error_text)}
+                    )
                     continue
 
                 run_id = self._store.record(

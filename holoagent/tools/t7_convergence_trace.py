@@ -29,7 +29,7 @@ from __future__ import annotations
 import math
 
 from holoagent.physics import get_default_adapter
-from holoagent.tools._util import compute_input_hash, new_run_id
+from holoagent.tools._util import call_adapter, compute_input_hash, new_run_id
 from holoagent.tools.contract import ToolResult
 from holoagent.tools.registry import register
 
@@ -90,10 +90,22 @@ def get_convergence_trace(
     input_hash = compute_input_hash(inputs)
 
     adapter = get_default_adapter()
-    resolved_params = adapter.MediumParams(**(medium_params or {})).__dict__
-    recorder, bpm = adapter.build_recorder_and_bpm(resolved_params, n_x, dx)
-    target = adapter.build_target(n_x, target_pattern, target_period_px)
-    result = adapter.run_method(
+    resolved_params = call_adapter(
+        "constructing MediumParams", adapter.MediumParams, **(medium_params or {})
+    ).__dict__
+    recorder, bpm = call_adapter(
+        "build_recorder_and_bpm", adapter.build_recorder_and_bpm, resolved_params, n_x, dx
+    )
+    target = call_adapter(
+        f"build_target(pattern={target_pattern!r})",
+        adapter.build_target,
+        n_x,
+        target_pattern,
+        target_period_px,
+    )
+    result = call_adapter(
+        f"run_method(method_id={method_id!r})",
+        adapter.run_method,
         method_id=method_id,
         target=target,
         recorder=recorder,

@@ -130,7 +130,7 @@ def grade_question(orchestrator: Orchestrator, store: ProvenanceStore, question:
         set(question.expected_tools).issubset(set(tools_called)) if question.expected_tools else True
     )
 
-    transcript = transcript_from_store(store, question.question, answer.run_ids)
+    transcript = transcript_from_store(store, question.question, answer.run_ids, answer.error_run_ids)
     violations = audit_answer(answer.text, transcript)
 
     return SetAResult(

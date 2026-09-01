@@ -18,7 +18,7 @@ class ToolCallRecord:
     run_id: str
     tool: str
     inputs: dict
-    outputs: dict  # asdict(ToolResult), as stored
+    outputs: dict  # asdict(ToolResult) for a success, or {"error": ...} for a failure (ProvenanceStore.record_error)
 
 
 @dataclass(frozen=True)
@@ -27,18 +27,32 @@ class SessionTranscript:
     calls: list[ToolCallRecord]
 
 
-def transcript_from_store(store: ProvenanceStore, query: str, run_ids: list[str]) -> SessionTranscript:
+def _row_to_record(row: dict) -> ToolCallRecord:
+    return ToolCallRecord(
+        run_id=row["run_id"],
+        tool=row["tool"],
+        inputs=json.loads(row["inputs_json"]),
+        outputs=json.loads(row["outputs_json"]),
+    )
+
+
+def transcript_from_store(
+    store: ProvenanceStore,
+    query: str,
+    run_ids: list[str],
+    error_run_ids: list[str] = (),
+) -> SessionTranscript:
+    """error_run_ids (OrchestratorAnswer.error_run_ids) are included so Set C
+    can ground numbers the model quotes from a tool's own real error message
+    (e.g. "missing 1 required positional argument") — those calls really
+    happened this session and are provenance-recorded (ProvenanceStore.
+    record_error), same as a successful call, just with outputs={"error": ...}
+    instead of a ToolResult.
+    """
     calls = []
-    for run_id in run_ids:
+    for run_id in [*run_ids, *error_run_ids]:
         row = store.get(run_id)
         if row is None:
             raise KeyError(f"run_id {run_id!r} not found in provenance store — cannot audit a session with a missing record")
-        calls.append(
-            ToolCallRecord(
-                run_id=row["run_id"],
-                tool=row["tool"],
-                inputs=json.loads(row["inputs_json"]),
-                outputs=json.loads(row["outputs_json"]),
-            )
-        )
+        calls.append(_row_to_record(row))
     return SessionTranscript(query=query, calls=calls)

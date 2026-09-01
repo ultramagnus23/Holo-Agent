@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 from dataclasses import asdict
 from pathlib import Path
 
@@ -55,6 +56,52 @@ class ProvenanceStore:
         )
         self._conn.commit()
         return result.run_id
+
+    def record_error(
+        self,
+        *,
+        tool: str,
+        inputs: dict,
+        error_text: str,
+        parent_run_id: str | None = None,
+    ) -> str:
+        """Persist a FAILED tool invocation. TRD §4: "every tool invocation
+        writes a record" -- that includes failures, not just successes.
+        Before this existed, a failed call left no trace at all, which
+        (a) violated that principle and (b) meant a model quoting a real
+        tool's own error message verbatim had no provenance to ground it
+        against under Set C, producing false-positive violations on
+        legitimate "tool errored" responses (see docs/set_c_matching_rule.md).
+
+        No ToolResult exists for a failure (the tool never got that far),
+        so this takes error_text directly rather than a ToolResult. Uses
+        sentinel values for the success-shaped columns
+        (in_validated_region=False, distance_from_bounds=NULL) since
+        neither concept applies to a call that never produced a value --
+        outputs_json holds {"error": error_text} instead of an asdict(ToolResult).
+        """
+        run_id = uuid.uuid4().hex
+        self._conn.execute(
+            """
+            INSERT INTO runs (
+                run_id, timestamp, tool, input_hash, inputs_json, outputs_json,
+                in_validated_region, distance_from_bounds, diagnostic, parent_run_id
+            ) VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                tool,
+                "",  # no input_hash: a failed call has no reproducible-by-hash result to cache
+                json.dumps(inputs),
+                json.dumps({"error": error_text}),
+                0,
+                None,
+                error_text,
+                parent_run_id,
+            ),
+        )
+        self._conn.commit()
+        return run_id
 
     def find_cached(self, input_hash: str) -> dict | None:
         """R5 / TRD §5.2: identical input_hash short-circuits re-computation."""

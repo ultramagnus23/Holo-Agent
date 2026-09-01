@@ -116,6 +116,30 @@ against real questions" principle in TRD §7.
   value like anything else — this system has no reason to produce prose
   containing arbitrary numbers that aren't citations of run IDs.
 
+## Failed tool calls are provenance too
+
+Found live via Set B (question b14): a model asked to fit a curve without
+specifying `K_rad_per_um` called `get_fit_quality` with a missing required
+argument, got back a real `TypeError`, and its final answer quoted that
+error message verbatim ("...missing 1 required positional argument..."—
+the "1" is Python's own error-message boilerplate, not a physical claim).
+Set C flagged it as an ungrounded number, because at the time **failed
+tool calls left no provenance record at all** — only successes were ever
+written to the store. That's not just a Set C gap, it's a violation of
+TRD §4 itself ("every tool invocation writes a record").
+
+Fixed structurally, not by carving out an exception in the audit:
+`ProvenanceStore.record_error` persists failed calls (with `outputs_json =
+{"error": ...}` instead of a `ToolResult`), `Orchestrator.answer` calls it
+in both exception branches and returns the resulting IDs as
+`OrchestratorAnswer.error_run_ids` (kept separate from `run_ids`, which
+still means "successful, result-bearing calls" for Set A/B's tool-selection
+grading), and `build_provenance_pool` grounds numeric tokens found in a
+recorded error's real text. A fabricated number sitting next to a quoted
+error is still caught — grounding the error text doesn't grant a blanket
+pass on the rest of the answer (see
+`tests/test_error_provenance.py::test_fabricated_number_alongside_a_real_error_is_still_caught`).
+
 ## What still needs a human, not a rule
 
 Set C tells you a number didn't match anything recorded. It does not

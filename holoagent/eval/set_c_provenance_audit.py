@@ -91,6 +91,22 @@ def build_provenance_pool(transcript: SessionTranscript) -> list[GroundedValue]:
         for path, v in _walk_numeric_leaves(call.inputs):
             pool.append(GroundedValue(v, f"{tag} input.{path}"))
 
+        if "error" in call.outputs:
+            # A failed call (ProvenanceStore.record_error) -- ground any
+            # number the model quotes from the REAL error text (e.g. "missing
+            # 1 required positional argument"). This is why error_run_ids
+            # exist and get recorded at all: without a real provenance record
+            # for the failure, quoting its own error message verbatim would
+            # false-positive as an ungrounded number (found live via Set B's
+            # b14 -- see docs/set_c_matching_rule.md).
+            for token_text, _, _ in extract_numeric_tokens(call.outputs["error"]):
+                core = token_text[:-1] if token_text.endswith("%") else token_text
+                try:
+                    pool.append(GroundedValue(float(core), f"{tag} error_text"))
+                except ValueError:
+                    continue
+            continue
+
         output_value = call.outputs.get("value")
         for path, v in _walk_numeric_leaves(output_value):
             pool.append(GroundedValue(v, f"{tag} output.value.{path}"))

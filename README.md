@@ -81,7 +81,45 @@ for the provenance-audit design.
   would type it, the model correctly calls `get_fit_quality` and produces
   a fully grounded answer. Both passed (455s, live Ollama + live
   HoloForge compute).
-- Set B (adversarial abstention, TRD §7) is still empty.
+- **Set B: 43 adversarial questions across all four escalation triggers**
+  (`holoagent/eval/questions/set_b.jsonl`) — 13 no-tool-exists, 6
+  tool-errored, 12 outside-validated-region, 12 out-of-scope. Every entry
+  is verified, not asserted: `no_tool_exists` claims are checked live
+  against the actual registry (a stub really raises `NotImplementedError`
+  today); `tool_errored` claims are checked live to actually raise
+  `ToolError`; `outside_validated_region` claims are checked live via
+  `check_validity_region` with the real `distance_from_bounds` recorded.
+  `tests/test_set_b_questions.py` re-checks all of this on every test run,
+  so a future tool implementation that makes a claim stale fails loudly
+  instead of silently rotting.
+- **Set B grading found and fixed two real bugs, and surfaced one real
+  model-reliability limitation — live, not in theory:**
+  - A single bad tool call (a stub's `NotImplementedError`, or a malformed
+    call missing a required argument) used to **crash the entire
+    orchestrator loop** instead of escalating gracefully — found via b01
+    and b14 live against the real model. Fixed in `orchestrator.py`:
+    broadened beyond `ToolError` to catch and gracefully escalate any
+    tool-call exception.
+  - Fixing that surfaced a second bug: a model quoting a real tool's own
+    error text verbatim ("...missing 1 required positional argument...")
+    false-positived under Set C, because **failed tool calls left no
+    provenance record at all** — a real gap against TRD §4's "every tool
+    invocation writes a record," not just a Set C shortcoming. Fixed
+    structurally: `ProvenanceStore.record_error` persists failures too;
+    see `docs/set_c_matching_rule.md`.
+  - Not fixed, because it isn't a bug: `qwen2.5:7b-instruct`, asked a
+    general-optics question (Brewster angle), correctly said "that's
+    general optics, not this twin" — then computed and stated the actual
+    angle anyway ("approximately 56.31 degrees"), unprompted, contradicting
+    its own system prompt. A real instruction-following limitation of this
+    7B model on the exact rule this system exists to enforce. Recorded as
+    `xfail(strict=True)` in `tests/test_set_b_live_grading.py` so it stays
+    a visible, tracked finding — TRD §7: "confident-wrong answers here are
+    P0." This is the clearest evidence yet that a 7B self-hosted model may
+    not be reliable enough for production without either a stronger model
+    or a hardened system-prompt/output-filtering layer.
+  All of this was found and fixed against the real live model, not
+  discovered later — 5 passed, 1 documented xfail, 341s.
 
 ## Layout
 

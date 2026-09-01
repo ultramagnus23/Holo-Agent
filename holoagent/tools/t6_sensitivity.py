@@ -31,7 +31,7 @@ from __future__ import annotations
 import math
 
 from holoagent.physics import get_default_adapter
-from holoagent.tools._util import compute_input_hash, new_run_id
+from holoagent.tools._util import call_adapter, compute_input_hash, new_run_id
 from holoagent.tools.contract import MissingParameterError, ToolResult
 from holoagent.tools.registry import register
 
@@ -109,11 +109,15 @@ def get_sensitivity(
     input_hash = compute_input_hash(inputs)
 
     adapter = get_default_adapter()
-    resolved_params = adapter.MediumParams(**(base_medium_params or {})).__dict__
+    resolved_params = call_adapter(
+        "constructing MediumParams", adapter.MediumParams, **(base_medium_params or {})
+    ).__dict__
     if parameter not in resolved_params:
         raise MissingParameterError(parameter)
 
-    result = adapter.sensitivity_finite_difference(
+    result = call_adapter(
+        f"sensitivity_finite_difference(parameter={parameter!r}, output_quantity={output_quantity!r})",
+        adapter.sensitivity_finite_difference,
         base_params=resolved_params,
         parameter=parameter,
         perturbation_pct=perturbation_pct,

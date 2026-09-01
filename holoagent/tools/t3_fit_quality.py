@@ -27,7 +27,7 @@ for what the fit actually used.
 from __future__ import annotations
 
 from holoagent.physics import get_default_adapter
-from holoagent.tools._util import compute_input_hash, new_run_id
+from holoagent.tools._util import call_adapter, compute_input_hash, new_run_id
 from holoagent.tools.contract import ToolResult
 from holoagent.tools.registry import register
 
@@ -85,8 +85,12 @@ def get_fit_quality(
     input_hash = compute_input_hash(inputs)
 
     adapter = get_default_adapter()
-    base_params_obj = adapter.MediumParams(**(base_medium_params or {}))
-    result = adapter.fit_curve(
+    base_params_obj = call_adapter(
+        "constructing MediumParams", adapter.MediumParams, **(base_medium_params or {})
+    )
+    result = call_adapter(
+        f"fit_curve(curve_type={curve_type!r})",
+        adapter.fit_curve,
         curve_type=curve_type,
         K=K_rad_per_um,
         xs=xs,
