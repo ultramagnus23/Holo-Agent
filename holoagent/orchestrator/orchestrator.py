@@ -40,6 +40,7 @@ from holoagent.orchestrator.escalation import (
 # holoagent.router once Tier A/B/C classification exists (TRD §8 Phase 2).
 from holoagent.eval._transcript import transcript_from_store
 from holoagent.eval.set_c_provenance_audit import audit_answer
+from holoagent.provenance.context import use_store
 from holoagent.provenance.store import ProvenanceStore
 from holoagent.tools.contract import ToolError
 from holoagent.tools.registry import ToolSpec, get_tool, list_tools
@@ -127,6 +128,14 @@ class Orchestrator:
         )
 
     def answer(self, query: str) -> OrchestratorAnswer:
+        # T10/T11 (query_run_store, compare_runs) need to reach THIS
+        # session's store from inside a plain tool function call -- see
+        # holoagent/provenance/context.py for why this is a scoped
+        # contextvar and not a global default.
+        with use_store(self._store):
+            return self._answer(query)
+
+    def _answer(self, query: str) -> OrchestratorAnswer:
         history: list[Turn] = [UserTurn(text=query)]
         tool_specs = self._tool_specs()
         parent_run_id: str | None = None

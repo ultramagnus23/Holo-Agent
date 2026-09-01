@@ -23,14 +23,16 @@ from holoagent.tools.registry import get_tool, list_tools
 # for real -- a stale Set B claim would otherwise sit there silently wrong.
 _STUB_TOOL_CALLS = {
     "b01_phase_map_stub": ("get_phase_map", dict(run_id="x", checkpoint=1)),
-    "b02_diffraction_efficiency_field_stub": ("get_diffraction_efficiency", dict(run_id="x", model="kogelnik")),
     "b03_medium_state_over_time_stub": ("get_medium_state", dict(run_id="x", timestep=1)),
     "b04_wavefront_reconstruction_angle_stub": ("reconstruct_wavefront", dict(run_id="x", viewing_angle_deg=1.0)),
     "b05_parameter_sweep_stub": ("run_parameter_sweep", dict(parameter_grid={"kappa": [1.0]}, outputs=["psnr"])),
-    "b06_query_run_store_stub": ("query_run_store", dict()),
-    "b07_compare_runs_stub": ("compare_runs", dict(run_id_a="x", run_id_b="y")),
     "b08_retrieve_literature_stub": ("retrieve_literature", dict(query="x")),
 }
+# T2 (get_diffraction_efficiency), T10 (query_run_store), T11 (compare_runs)
+# were real stubs when b02/b06/b07 were written; now implemented (this
+# session) -- their Set B entries were removed from set_b.jsonl as stale
+# rather than left to silently claim something false. See git history for
+# the removal commit.
 
 # question id -> (tool_name, kwargs) that must actually raise ToolError today.
 _TOOL_ERRORED_CALLS = {

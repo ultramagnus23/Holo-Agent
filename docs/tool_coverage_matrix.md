@@ -7,7 +7,7 @@ it is the source of truth for R2 (PRD §5).
 | # | Tool | Phase | computed | exposed | typed | tested | documented | validity-bounded |
 |---|---|---|---|---|---|---|---|---|
 | T1 | `get_phase_map` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
-| T2 | `get_diffraction_efficiency` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
+| T2 | `get_diffraction_efficiency` | 2 | ✓ (rescoped to the real spatial field — see below) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | T3 | `get_fit_quality` | 1 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | T4 | `get_medium_state` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
 | T5 | `reconstruct_wavefront` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
@@ -15,8 +15,8 @@ it is the source of truth for R2 (PRD §5).
 | T7 | `get_convergence_trace` | 1 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | T8 | `check_validity_region` | 1 | ✓ (hand-transcribed bounds, not a HoloForge model — see below) | ✓ | ✓ | ✓ | ✓ | n/a (is the validity check itself) |
 | T9 | `run_parameter_sweep` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
-| T10 | `query_run_store` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
-| T11 | `compare_runs` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
+| T10 | `query_run_store` | 2 | ✓ | ✓ | ✓ | ✓ | ✓ | n/a (structured records, not a physical quantity) |
+| T11 | `compare_runs` | 2 | ✓ | ✓ | ✓ | ✓ | ✓ | n/a (structured diff, not a physical quantity) |
 | T12 | `retrieve_literature` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
 
 **computed** — HoloForge actually computes this quantity and the adapter
@@ -158,3 +158,61 @@ documented xfail). Design is block-and-abstain, not block-and-regenerate
 default here. Tests: `tests/test_evidence_validator.py` (5 fast tests:
 clean pass-through, fabrication blocked, block recorded to provenance,
 user-supplied numbers not blocked, real tool-result numbers not blocked).
+
+## Milestone 2 (master-build prompt): T2, T10, T11 implemented
+
+Before touching any of T1/T2/T4/T5/T9, an Explore agent investigated what
+each is actually implementable against, live in the HoloForge source
+(not assumed) — full findings are in git history for this commit. Verdict
+for all five: **partially supportable** — HoloForge has real capability
+in each direction, but every one of the original specs overclaims in some
+way. T2 was the cleanest to close this pass; T1/T4/T5/T9 remain open,
+each documented below with the concrete constraint HoloForge itself
+imposes (see "Milestone 2 continued" further down, once those land).
+
+**T2 (`get_diffraction_efficiency`) — rescoped, not just implemented.**
+The original spec ("efficiency across the field") describes a quantity
+that doesn't exist anywhere in HoloForge — confirmed by reading
+`holomedia/optimize.py` and `holomedia/diffraction.py` directly: the only
+"diffraction efficiency" HoloForge computes is a single scalar (a
+masked-sum ratio, `holomedia.diffraction_efficiency`). What genuinely IS
+spatially resolved is the reconstructed intensity field
+(`SlabBPM.forward`'s real-valued `|E|^2` output) — computed internally by
+every method but discarded by `experiments/methods.py::run_method` before
+it returns (confirmed: its return dict keeps only the scalar). T2 now
+exposes that discarded field via
+`HoloForgeAdapter.run_method_with_field`, which calls the exact same
+underlying per-method functions (`media_blind_gs`, `media_in_the_loop`,
+etc., imported from `holomedia` — the same functions
+`experiments/methods.py` itself calls) rather than reimplementing
+anything. No phase is returned — this BPM formulation doesn't track phase
+separately from intensity, and claiming otherwise would be claiming a
+computation that was never performed. Known scaling gap, documented not
+hidden: the field arrays are inlined into `ToolResult.value` (fine for
+the small grids this is tested against, n_x<=128); TRD §4 says large
+fields belong on disk with a path reference, which isn't built yet.
+Tested live against real HoloForge (`tests/test_tools_t2_t10_t11.py`).
+
+**T10 (`query_run_store`) and T11 (`compare_runs`) — implemented, no
+HoloForge dependency.** These read `holoagent`'s own `ProvenanceStore`,
+not HoloForge, so no rescoping was needed against physics reality. The
+real design problem was different: unlike T3/T6/T7/T8, which reach
+HoloForge via a process-wide adapter singleton, T10/T11 need THIS
+session's store specifically — a global default would silently answer
+against the wrong session's data. Solved with a scoped contextvar
+(`holoagent/provenance/context.py`, `use_store`/`get_current_store`),
+set by `Orchestrator.answer()` for the duration of each call. T10 supports
+equality/threshold filtering (`tool`, `failed`, `since`/`until`,
+`value_field` + `value_gt`/`value_lt`/`value_eq`) — deliberately not a
+general JSON-path query language, since nothing in the master prompt's
+own examples needs one. T11 diffs inputs, output values, and validity
+flags between two runs, including comparing a success against a failure
+(a real, useful case: "why did this one fail when that one didn't"). Both
+fully tested (`tests/test_tools_t2_t10_t11.py`, fast — no HoloForge
+compute needed).
+
+Implementing these retired two now-stale Set B claims: `b02`
+(diffraction-efficiency-field stub), `b06` (query-run-store stub), `b07`
+(compare-runs stub) were removed from `set_b.jsonl` rather than left
+false — exactly the staleness `test_set_b_questions.py` exists to catch,
+and it did.

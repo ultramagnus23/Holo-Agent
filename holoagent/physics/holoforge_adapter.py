@@ -113,6 +113,29 @@ class HoloForgeAdapter:
 
         self._fit_curve_fn = _holoforge_fit.fit_curve
 
+        from holomedia import (
+            media_blind_gs,
+            media_blind_sgd,
+            media_in_the_loop,
+            linear_precomp,
+            oracle_ideal,
+            oracle_unconstrained,
+            sat_sgd,
+            diffraction_efficiency,
+        )
+
+        self._diffraction_efficiency_fn = diffraction_efficiency
+
+        self._method_fns = {
+            "GS": media_blind_gs,
+            "BSGD": media_blind_sgd,
+            "LPC": linear_precomp,
+            "MIL": media_in_the_loop,
+            "SAT": sat_sgd,
+            "ORC": oracle_ideal,
+            "ORU": oracle_unconstrained,
+        }
+
     # ------------------------------------------------------------------ helpers
     def build_target(self, n_x: int, pattern: str, period_px: int = 8) -> Any:
         """Canonical target patterns, matching the ones HoloForge's own
@@ -161,6 +184,91 @@ class HoloForgeAdapter:
     def fit_curve(self, **kwargs: Any) -> dict:
         """Passthrough to experiments/fit_literature_curves.py::fit_curve."""
         return self._fit_curve_fn(**kwargs)
+
+    # ------------------------------------------------------------------ T2: spatial field, not run_method's discarded one
+    def run_method_with_field(
+        self,
+        method_id: str,
+        target: Any,
+        recorder: Any,
+        bpm: Any,
+        seed: int,
+        n_iters: int = 800,
+        lr: float = 5e-2,
+        dose_budget: float = 1.0,
+        contrast_cap: float | None = None,
+        converge_tol: float | None = None,
+        log_every: int = 50,
+    ) -> dict:
+        """Calls the SAME underlying per-method functions
+        experiments/methods.py::run_method dispatches to (imported from
+        holomedia, not reimplemented) -- but keeps the spatially-resolved
+        exposure (E) and reconstructed intensity (recon) fields that
+        run_method computes and then discards, returning only a reduced
+        scalar diffraction_efficiency. This is the real capability behind
+        T2 -- see docs/tool_coverage_matrix.md's note on why T2 was
+        rescoped from a nonexistent "spatial efficiency map" (no such
+        quantity is computed anywhere in HoloForge) to this, the actual
+        spatially-resolved intensity HoloForge does compute.
+        """
+        if method_id not in self._method_fns:
+            raise ValueError(f"unknown method_id {method_id!r}, expected one of {sorted(self._method_fns)}")
+
+        fn = self._method_fns[method_id]
+        history: list = []
+        iterations_run = n_iters
+        early_stop_reason = "n/a"
+
+        if method_id == "GS":
+            E, recon = fn(target, recorder, bpm, dose_budget=dose_budget, seed=seed, contrast_cap=contrast_cap)
+            iterations_run = 0
+            early_stop_reason = "closed_form_no_optimization"
+        elif method_id == "LPC":
+            E, recon = fn(target, recorder, bpm, dose_budget=dose_budget, contrast_cap=contrast_cap)
+            iterations_run = 0
+            early_stop_reason = "closed_form_no_optimization"
+        elif method_id == "ORU":
+            E, recon = fn(target, recorder, bpm, n_iters=n_iters, lr=lr, seed=seed)
+            early_stop_reason = "n_iters_exhausted"
+        elif method_id == "ORC":
+            E, recon = fn(
+                target, recorder, bpm, n_iters=n_iters, lr=lr, dose_budget=dose_budget, seed=seed,
+                contrast_cap=contrast_cap,
+            )
+            early_stop_reason = "n_iters_exhausted"
+        elif method_id in ("BSGD", "MIL", "SAT"):
+            kwargs = dict(
+                n_iters=n_iters, lr=lr, dose_budget=dose_budget, seed=seed,
+                log_every=log_every, contrast_cap=contrast_cap,
+            )
+            if method_id == "MIL":
+                kwargs["verbose"] = False
+            if method_id in ("MIL", "SAT"):
+                kwargs["converge_tol"] = converge_tol
+            E, recon, history = fn(target, recorder, bpm, **kwargs)
+            iterations_run = history[-1][0] if history else 0
+            early_stop_reason = (
+                "converge_tol" if (converge_tol is not None and iterations_run < n_iters - 1) else "n_iters_exhausted"
+            )
+        else:
+            raise ValueError(f"unhandled method_id {method_id!r} in run_method_with_field dispatch")
+
+        # Same mask convention experiments/methods.py::run_method uses
+        # (mask = target > 0.05) so the scalar here is directly comparable
+        # to T7's final_psnr-adjacent diffraction_efficiency, not a
+        # different definition invented for this tool.
+        mask = (target > 0.05).double()
+        scalar_efficiency = float(self._diffraction_efficiency_fn(recon, mask))
+
+        return dict(
+            method_id=method_id,
+            E=E,
+            recon=recon,
+            scalar_efficiency=scalar_efficiency,
+            iterations_run=iterations_run,
+            early_stop_reason=early_stop_reason,
+            history=history,
+        )
 
     # ------------------------------------------------------------------ T8: hand-built, not HoloForge-native
     def check_validity_region(self, params: dict, K_rad_per_um: float | None = None) -> dict:
