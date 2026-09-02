@@ -26,13 +26,12 @@ _STUB_TOOL_CALLS = {
     "b03_medium_state_over_time_stub": ("get_medium_state", dict(run_id="x", timestep=1)),
     "b04_wavefront_reconstruction_angle_stub": ("reconstruct_wavefront", dict(run_id="x", viewing_angle_deg=1.0)),
     "b05_parameter_sweep_stub": ("run_parameter_sweep", dict(parameter_grid={"kappa": [1.0]}, outputs=["psnr"])),
-    "b08_retrieve_literature_stub": ("retrieve_literature", dict(query="x")),
 }
-# T2 (get_diffraction_efficiency), T10 (query_run_store), T11 (compare_runs)
-# were real stubs when b02/b06/b07 were written; now implemented (this
-# session) -- their Set B entries were removed from set_b.jsonl as stale
-# rather than left to silently claim something false. See git history for
-# the removal commit.
+# T2 (get_diffraction_efficiency), T10 (query_run_store), T11 (compare_runs),
+# T12 (retrieve_literature) were real stubs when b02/b06/b07/b08 were
+# written; now implemented (this session) -- their Set B entries were
+# removed from set_b.jsonl as stale rather than left to silently claim
+# something false. See git history for the removal commits.
 
 # question id -> (tool_name, kwargs) that must actually raise ToolError today.
 _TOOL_ERRORED_CALLS = {
@@ -95,7 +94,10 @@ _OUTSIDE_REGION_CALLS = {
 
 
 def test_set_b_has_questions():
-    assert len(load_questions()) >= 40
+    # Was 43, now 39 -- b02/b06/b07/b08 were retired as stale once T2/T10/
+    # T11/T12 became real tools (see git history), not padded back up to a
+    # round number with lower-quality filler entries.
+    assert len(load_questions()) >= 35
 
 
 def test_every_question_has_verification_note():

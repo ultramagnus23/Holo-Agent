@@ -18,11 +18,23 @@ from __future__ import annotations
 
 import contextlib
 from contextvars import ContextVar
+from typing import TYPE_CHECKING
 
-from holoagent.provenance.store import ProvenanceStore
 from holoagent.tools.contract import ToolError
 
-_current_store: ContextVar[ProvenanceStore | None] = ContextVar("current_store", default=None)
+if TYPE_CHECKING:
+    # Type-only: a real (runtime) import here creates a circular import --
+    # holoagent.provenance.__init__ -> store.py -> tools.contract ->
+    # holoagent.tools.__init__ (imports every tool, including T10) -> this
+    # module -> back to holoagent.provenance.store, which is still
+    # mid-import (ProvenanceStore not yet defined). Found live: any entry
+    # point that imports holoagent.provenance or holoagent.eval before
+    # holoagent.tools hit this; existing tests happened to avoid it purely
+    # by import order (`import holoagent.tools` first), which is exactly
+    # the kind of fragile-by-luck bug worth actually fixing.
+    from holoagent.provenance.store import ProvenanceStore
+
+_current_store: ContextVar["ProvenanceStore | None"] = ContextVar("current_store", default=None)
 
 
 @contextlib.contextmanager

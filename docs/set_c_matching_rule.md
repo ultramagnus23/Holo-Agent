@@ -140,6 +140,25 @@ error is still caught — grounding the error text doesn't grant a blanket
 pass on the rest of the answer (see
 `tests/test_error_provenance.py::test_fabricated_number_alongside_a_real_error_is_still_caught`).
 
+## Numbers embedded in string leaves, not just structured JSON leaves
+
+Found live while wiring T12 (`retrieve_literature`): a model quoting a
+real number verbatim from a *retrieved passage's prose* ("D0 is 0.025
+um^2/s from Bruder et al.") false-positived, because
+`_walk_numeric_leaves` only ever extracted numbers from structured
+`int`/`float` JSON leaves — a number sitting inside a `str` value (a
+passage's text, or a tool's `diagnostic` message, which wasn't walked
+into the pool AT ALL before this) was invisible to it. Same root cause as
+the error-text gap above, just not limited to failure records.
+
+Fixed by generalizing `_walk_numeric_leaves` itself to also extract
+numbers from string leaves (reusing `extract_numeric_tokens`), and by
+adding `diagnostic` to what `build_provenance_pool` walks for successful
+calls. The error-text handling above now reuses the same generalized
+walker instead of its own duplicate extraction logic. Same guardrail as
+before: a genuinely different fabricated number next to a grounded quote
+is still caught (`tests/test_string_leaf_provenance.py`).
+
 ## What still needs a human, not a rule
 
 Set C tells you a number didn't match anything recorded. It does not

@@ -17,7 +17,7 @@ it is the source of truth for R2 (PRD §5).
 | T9 | `run_parameter_sweep` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
 | T10 | `query_run_store` | 2 | ✓ | ✓ | ✓ | ✓ | ✓ | n/a (structured records, not a physical quantity) |
 | T11 | `compare_runs` | 2 | ✓ | ✓ | ✓ | ✓ | ✓ | n/a (structured diff, not a physical quantity) |
-| T12 | `retrieve_literature` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
+| T12 | `retrieve_literature` | 2 | ✓ (plain keyword search, not embedding/RAG — see below) | ✓ | ✓ | ✓ | ✓ | n/a (returns cited text, not a physical quantity) |
 
 **computed** — HoloForge actually computes this quantity and the adapter
 call into it works.
@@ -211,8 +211,39 @@ flags between two runs, including comparing a success against a failure
 fully tested (`tests/test_tools_t2_t10_t11.py`, fast — no HoloForge
 compute needed).
 
-Implementing these retired two now-stale Set B claims: `b02`
+Implementing these retired now-stale Set B claims: `b02`
 (diffraction-efficiency-field stub), `b06` (query-run-store stub), `b07`
 (compare-runs stub) were removed from `set_b.jsonl` rather than left
 false — exactly the staleness `test_set_b_questions.py` exists to catch,
 and it did.
+
+**T12 (`retrieve_literature`) — implemented as plain keyword search, not
+embedding/RAG.** Master-prompt §38 warns against "unnecessary web-search
+frameworks"; TRD §6 says "RAG (T12): plain — no heavy framework." For a
+corpus this size (~750 lines across ~10 real HoloForge markdown files —
+`docs/*.md`, `README.md`, `data/literature/README.md`), a real embedding
+index buys nothing a substring search doesn't already get, and adds a
+failure mode this project can't afford: a semantic "near match" that
+isn't the passage the answer actually relies on.
+`holoagent/tools/_literature_corpus.py` chunks the real files on blank
+lines and scores by raw keyword occurrence count; every returned passage
+is a verbatim substring of a real file with a `file:line` citation — the
+tool never summarizes or paraphrases, so "unsupported text generation"
+(never-do #10) can't happen inside it. Removed `b08`
+(retrieve-literature-stub) from Set B as stale for the same reason as
+the three above.
+
+Implementing T12 surfaced two more real bugs, fixed in the same pass:
+
+1. **Circular import** (`holoagent/provenance/context.py` importing
+   `ProvenanceStore` for a type hint created a cycle through
+   `holoagent.tools.__init__` → T10 → context → store, mid-init).
+   Fragile-by-luck: existing tests happened to avoid it because they all
+   imported `holoagent.tools` first. Fixed with a `TYPE_CHECKING` guard —
+   the runtime dependency wasn't needed at all.
+2. **Set C only grounded numbers in structured JSON leaves, never numbers
+   embedded in string values** (a retrieved passage's prose, or a tool's
+   `diagnostic` message — which wasn't walked into the pool at all before
+   this). Same root cause as the error-text gap from Set B's b14, just
+   not limited to failure records. Fixed by generalizing
+   `_walk_numeric_leaves` itself; see `docs/set_c_matching_rule.md`.

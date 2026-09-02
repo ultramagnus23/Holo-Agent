@@ -59,10 +59,30 @@ class _MatchResult:
 
 
 def _walk_numeric_leaves(obj, path: str = ""):
+    """Yields (path, value) for every number reachable inside obj --
+    including numbers embedded in STRING leaves (e.g. a retrieved
+    literature passage's prose, "D0 is 0.025 um^2/s from Bruder et al.", or
+    a diagnostic message), not just structured int/float values. Found
+    live via T12: a model quoting a real number verbatim from a retrieved
+    passage's text false-positived, because only structured JSON leaves
+    were grounded -- the exact same class of gap as error_text grounding
+    below, just for any string field rather than only failure records.
+    Every string that reaches this function came from something actually
+    recorded in provenance (a real tool call's real inputs/outputs), so
+    grounding numbers found inside it is the same principle as everywhere
+    else in this file, not a new loophole.
+    """
     if isinstance(obj, bool):
         return  # bool is a subclass of int in Python; not a numeric quantity
     if isinstance(obj, (int, float)):
         yield path or "value", float(obj)
+    elif isinstance(obj, str):
+        for token_text, _, _ in extract_numeric_tokens(obj):
+            core = token_text[:-1] if token_text.endswith("%") else token_text
+            try:
+                yield path or "value", float(core)
+            except ValueError:
+                continue
     elif isinstance(obj, dict):
         for k, v in obj.items():
             yield from _walk_numeric_leaves(v, f"{path}.{k}" if path else str(k))
@@ -98,13 +118,10 @@ def build_provenance_pool(transcript: SessionTranscript) -> list[GroundedValue]:
             # exist and get recorded at all: without a real provenance record
             # for the failure, quoting its own error message verbatim would
             # false-positive as an ungrounded number (found live via Set B's
-            # b14 -- see docs/set_c_matching_rule.md).
-            for token_text, _, _ in extract_numeric_tokens(call.outputs["error"]):
-                core = token_text[:-1] if token_text.endswith("%") else token_text
-                try:
-                    pool.append(GroundedValue(float(core), f"{tag} error_text"))
-                except ValueError:
-                    continue
+            # b14 -- see docs/set_c_matching_rule.md). _walk_numeric_leaves
+            # handles the string-extraction itself now (see its docstring).
+            for path, v in _walk_numeric_leaves(call.outputs["error"], "error_text"):
+                pool.append(GroundedValue(v, f"{tag} {path}"))
             continue
 
         output_value = call.outputs.get("value")
@@ -114,6 +131,11 @@ def build_provenance_pool(transcript: SessionTranscript) -> list[GroundedValue]:
         dfb = call.outputs.get("distance_from_bounds")
         if isinstance(dfb, (int, float)) and not isinstance(dfb, bool):
             pool.append(GroundedValue(float(dfb), f"{tag} output.distance_from_bounds"))
+
+        diagnostic = call.outputs.get("diagnostic")
+        if diagnostic:
+            for path, v in _walk_numeric_leaves(diagnostic, "diagnostic"):
+                pool.append(GroundedValue(v, f"{tag} output.{path}"))
 
     return pool
 
