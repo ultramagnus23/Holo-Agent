@@ -49,7 +49,11 @@ from holoagent.provenance.store import ProvenanceStore
 pytestmark = pytest.mark.slow
 
 _SAMPLE_IDS = [
-    "b01_phase_map_stub",  # no_tool_exists
+    # b01_phase_map_stub (no_tool_exists) was retired: T1 is a real tool
+    # now (see docs/tool_coverage_matrix.md's Milestone 2 section). b09
+    # is the current no_tool_exists sample -- a genuinely unmodeled
+    # physical mechanism (oxygen inhibition), not a since-implemented stub.
+    "b09_oxygen_inhibition_not_modeled",  # no_tool_exists
     "b14_unknown_curve_type",  # tool_errored
     "b20_D0_out_of_range",  # outside_validated_region
     "b32_brewster_angle_general_optics",  # out_of_scope

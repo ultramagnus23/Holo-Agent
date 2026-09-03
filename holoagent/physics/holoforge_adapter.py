@@ -25,6 +25,7 @@ autograd.
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 from pathlib import Path
@@ -126,6 +127,26 @@ class HoloForgeAdapter:
 
         self._diffraction_efficiency_fn = diffraction_efficiency
 
+        from holomedia import kogelnik_de
+
+        self._kogelnik_de_fn = kogelnik_de
+
+        from holomedia import (
+            psnr_si_batch,
+            media_in_the_loop_batched,
+            media_blind_sgd_batched,
+            media_blind_gs_batched,
+            oracle_ideal_batched,
+        )
+
+        self._psnr_si_batch_fn = psnr_si_batch
+        self._batched_method_fns = {
+            "MIL": media_in_the_loop_batched,
+            "BSGD": media_blind_sgd_batched,
+            "GS": media_blind_gs_batched,
+            "ORC": oracle_ideal_batched,
+        }
+
         self._method_fns = {
             "GS": media_blind_gs,
             "BSGD": media_blind_sgd,
@@ -155,6 +176,71 @@ class HoloForgeAdapter:
             target[lo:hi] = 1.0
             return target
         raise ValueError(f"unknown target pattern {pattern!r}, expected 'square_wave' or 'single_slit'")
+
+    def build_grating_exposure(self, n_x: int, dx: float, K_rad_per_um: float, contrast: float = 0.9) -> Any:
+        """The canonical sinusoidal-grating exposure pattern used
+        throughout HoloForge's own literature-fitting code (e.g.
+        fit_literature_curves.py's simulate_growth_dn: "exposure = 1.0 +
+        0.9*cos(K*x)") -- the natural "exposure" for T4's recording-state
+        questions, distinct from build_target's binary reconstruction
+        targets (T4 is about the recording physics itself, not an
+        optimizer's target pattern).
+        """
+        torch = self._torch
+        x = torch.arange(n_x, dtype=torch.float64) * dx
+        return 1.0 + contrast * torch.cos(K_rad_per_um * x)
+
+    def get_medium_state_at_timestep(
+        self,
+        params: dict,
+        n_x: int,
+        dx: float,
+        K_rad_per_um: float,
+        contrast: float,
+        t_total: float,
+        n_steps: int,
+        timestep: int,
+    ) -> dict:
+        """Real HoloForge capability: NPDDRecorder.forward(...,
+        return_history=True) returns (u, N) at every one of n_steps
+        timesteps in one pass (holomedia/npdd.py) -- confirmed by reading
+        the class directly, not assumed. dn at each step is derived by
+        applying the SAME formula NPDDRecorder itself uses for the final
+        step (dn_max * tanh(1.5*N)) to that step's N -- not new physics,
+        the identical formula, just evaluated earlier.
+
+        Dye/exposure-depletion state (d) is genuinely NOT exposed by
+        return_history (only (u, N) are captured) and is not
+        reconstructable from the outside without re-deriving the bleaching
+        recurrence, which would cross from "calling HoloForge differently"
+        into "writing new physics-adjacent code" -- out of scope for a
+        frozen layer 4. This is documented, not silently omitted.
+        """
+        if not (0 <= timestep < n_steps):
+            raise ValueError(f"timestep {timestep} out of range [0, {n_steps})")
+
+        torch = self._torch
+        medium_params = self.MediumParams(**params)
+        recorder = self.NPDDRecorder(n_x, dx, t_total=t_total, n_steps=n_steps, params=medium_params)
+        exposure = self.build_grating_exposure(n_x, dx, K_rad_per_um, contrast)
+
+        _, hist = recorder(exposure, return_history=True)
+        u_t, N_t = hist[timestep]
+        dn_t = medium_params.dn_max * torch.tanh(1.5 * N_t)
+        x = torch.arange(n_x, dtype=torch.float64) * dx
+        dn1_amplitude = float((2.0 * torch.mean(dn_t * torch.cos(K_rad_per_um * x))).abs())
+
+        return dict(
+            u=u_t,
+            N=N_t,
+            dn=dn_t,
+            dn1_amplitude=dn1_amplitude,
+            mean_u=float(u_t.mean()),
+            mean_N=float(N_t.mean()),
+            dn_max=medium_params.dn_max,
+            fraction_of_dn_max=dn1_amplitude / medium_params.dn_max if medium_params.dn_max else float("nan"),
+            real_time_s=timestep * (t_total / n_steps),
+        )
 
     def build_recorder_and_bpm(
         self,
@@ -270,6 +356,127 @@ class HoloForgeAdapter:
             history=history,
         )
 
+    # ------------------------------------------------------------------ T9: real batching only for (target, seed)
+    def run_seed_sweep_batched(
+        self,
+        method_id: str,
+        params: dict,
+        n_x: int,
+        dx: float,
+        target_pattern: str,
+        target_period_px: int,
+        seeds: list[int],
+        n_iters: int = 400,
+        lr: float = 5e-2,
+        dose_budget: float = 1.0,
+        log_every: int = 50,
+    ) -> dict:
+        """Real HoloForge batching: one (B, n_x) Adam trajectory instead of
+        B sequential Python-loop calls -- confirmed bit-identical to the
+        unbatched path by HoloForge's own tests/test_smoke.py (see
+        holomedia/optimize.py's comment above these functions). Only 4 of
+        HoloForge's 7 methods have a batched counterpart (MIL, BSGD, GS,
+        ORC — not LPC, SAT, ORU), and the batch axis is (target, seed), not
+        physical medium parameters (see run_medium_param_sweep_looped for
+        why that can't be batched at all).
+        """
+        if method_id not in self._batched_method_fns:
+            raise ValueError(
+                f"no batched implementation for method_id {method_id!r}, "
+                f"expected one of {sorted(self._batched_method_fns)}"
+            )
+        torch = self._torch
+        fn = self._batched_method_fns[method_id]
+        medium_params = self.MediumParams(**params)
+        recorder = self.NPDDRecorder(n_x, dx, params=medium_params)
+        bpm = self.SlabBPM(n_x, dx, 0.405, medium_params.thickness, n0=medium_params.n0)
+        target = self.build_target(n_x, target_pattern, target_period_px)
+        batch_size = len(seeds)
+        targets = target.unsqueeze(0).expand(batch_size, -1).contiguous()
+
+        history: list = []
+        if method_id == "GS":
+            E, recon = fn(targets, recorder, bpm, seeds, dose_budget=dose_budget)
+        elif method_id in ("BSGD", "ORC"):
+            E, recon = fn(targets, recorder, bpm, seeds, n_iters=n_iters, lr=lr, dose_budget=dose_budget)
+        else:  # MIL
+            E, recon, history = fn(
+                targets, recorder, bpm, seeds, n_iters=n_iters, lr=lr,
+                dose_budget=dose_budget, log_every=log_every, verbose=False,
+            )
+
+        psnr_per_row = self._psnr_si_batch_fn(recon, targets)
+        mask = (target > 0.05).double()
+        de_per_row = (recon * mask).sum(dim=-1) / (recon.sum(dim=-1) + 1e-12)
+
+        return dict(
+            method_id=method_id,
+            seeds=list(seeds),
+            psnr_per_seed=[float(x) for x in psnr_per_row],
+            diffraction_efficiency_per_seed=[float(x) for x in de_per_row],
+            history=history,
+            batched=True,
+        )
+
+    def run_medium_param_sweep_looped(
+        self,
+        method_id: str,
+        base_params: dict,
+        sweep_field: str,
+        sweep_values: list,
+        n_x: int,
+        dx: float,
+        target_pattern: str,
+        target_period_px: int,
+        fixed_seed: int,
+        n_iters: int,
+        lr: float,
+        dose_budget: float,
+        log_every: int,
+    ) -> dict:
+        """The honest fallback: HoloForge has NO batching capability across
+        physical medium parameters at all -- confirmed by reading every
+        real sweep script in the repo (experiments/gpu_f2_f3_recovery.py::
+        full(), experiments/gpu_bpm_wavelength_sweep.py::main()), which all
+        loop in Python. kappa/D0/sigma/etc. are baked into NPDDRecorder's
+        and SlabBPM's per-instance FFT buffers at construction, so one
+        instance cannot represent multiple parameter settings at once.
+        This executes exactly that same kind of loop, one fresh
+        recorder/bpm per value -- presented honestly as a loop (see
+        T9's `batched: False` field), not marketed as batching HoloForge
+        doesn't have.
+        """
+        results = []
+        for value in sweep_values:
+            # sweep_field == "seed" (a non-batchable method falling back to
+            # this loop) means sweep the SEED, medium params fixed --
+            # "seed" is not a MediumParams field and must never be injected
+            # into it. Any other sweep_field is a real MediumParams
+            # override, seed held fixed instead. Conflating these two was
+            # a real bug: TypeError: MediumParams.__init__() got an
+            # unexpected keyword argument 'seed', caught live in testing.
+            if sweep_field == "seed":
+                params = dict(base_params)
+                seed = value
+            else:
+                params = dict(base_params, **{sweep_field: value})
+                seed = fixed_seed
+            recorder, bpm = self.build_recorder_and_bpm(params, n_x, dx)
+            target = self.build_target(n_x, target_pattern, target_period_px)
+            r = self.run_method(
+                method_id=method_id, target=target, recorder=recorder, bpm=bpm,
+                seed=seed, n_iters=n_iters, lr=lr, dose_budget=dose_budget, log_every=log_every,
+            )
+            results.append(
+                dict(
+                    sweep_value=value,
+                    psnr=r["psnr"],
+                    diffraction_efficiency=r["diffraction_efficiency"],
+                    iterations_run=r["iterations_run"],
+                )
+            )
+        return dict(method_id=method_id, sweep_field=sweep_field, results=results, batched=False)
+
     # ------------------------------------------------------------------ T8: hand-built, not HoloForge-native
     def check_validity_region(self, params: dict, K_rad_per_um: float | None = None) -> dict:
         """No equivalent exists in HoloForge itself (see module docstring
@@ -303,6 +510,44 @@ class HoloForgeAdapter:
         in_region = len(violations) == 0
         distance = None if in_region else max(distances)
         return dict(in_validated_region=in_region, violations=violations, distance_from_bounds=distance)
+
+    # ------------------------------------------------------------------ T5: Kogelnik tier only, not the real BPM path
+    def reconstruct_at_angle(
+        self,
+        dn: float,
+        thickness_um: float,
+        wavelength_um: float,
+        theta_B_deg: float,
+        dtheta_deg: float,
+    ) -> float:
+        """Diffraction efficiency at a reconstruction angle detuned by
+        dtheta_deg from the Bragg-matched angle theta_B_deg, via
+        holomedia.kogelnik_de(dtheta=...) -- confirmed by reading
+        holomedia/diffraction.py directly to be the ONLY place in
+        HoloForge with a real, tested, wired-in angle parameter
+        (experiments/fit_literature_curves.py:simulate_angular_de calls it
+        exactly this way).
+
+        NOT the real BPM reconstruction pipeline (SlabBPM, what
+        run_method/T2/T7 actually use): SlabBPM.forward has no angle
+        parameter at all (always normal incidence) -- confirmed by reading
+        its signature and every call site in the repo. SlabBPM does accept
+        an `incident=` field a caller COULD construct as a tilted plane
+        wave, but grep across the whole HoloForge repo finds zero call
+        sites ever doing this -- it would mean exercising a real but never
+        validated/tested code path, not wrapping an existing verified
+        capability. T5 is therefore scoped to this analytic Kogelnik tier
+        only; it does not answer "off-axis BPM reconstruction" questions.
+        """
+        torch = self._torch
+        de = self._kogelnik_de_fn(
+            torch.tensor(dn, dtype=torch.float64),
+            thickness_um,
+            wavelength_um,
+            theta_B=math.radians(theta_B_deg),
+            dtheta=torch.tensor(math.radians(dtheta_deg), dtype=torch.float64),
+        )
+        return float(de)
 
     # ------------------------------------------------------------------ T6: finite-difference, not autograd
     def sensitivity_finite_difference(

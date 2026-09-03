@@ -6,18 +6,24 @@ it is the source of truth for R2 (PRD §5).
 
 | # | Tool | Phase | computed | exposed | typed | tested | documented | validity-bounded |
 |---|---|---|---|---|---|---|---|---|
-| T1 | `get_phase_map` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
+| T1 | `get_phase_map` | 2 | ✓ (rescoped: deterministic re-run, no phase — see below) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | T2 | `get_diffraction_efficiency` | 2 | ✓ (rescoped to the real spatial field — see below) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | T3 | `get_fit_quality` | 1 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| T4 | `get_medium_state` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
-| T5 | `reconstruct_wavefront` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
+| T4 | `get_medium_state` | 2 | ✓ (no dye state d — see below) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| T5 | `reconstruct_wavefront` | 2 | ✓ (Kogelnik tier only, not full BPM — see below) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | T6 | `get_sensitivity` | 1 | ✓ (finite-difference, not autograd — see below) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | T7 | `get_convergence_trace` | 1 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | T8 | `check_validity_region` | 1 | ✓ (hand-transcribed bounds, not a HoloForge model — see below) | ✓ | ✓ | ✓ | ✓ | n/a (is the validity check itself) |
-| T9 | `run_parameter_sweep` | 2 | ✗ | ✓ (stub) | ✓ | ✗ | ✓ | ✗ |
+| T9 | `run_parameter_sweep` | 2 | ✓ (batched only for target/seed, looped for medium params — see below) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | T10 | `query_run_store` | 2 | ✓ | ✓ | ✓ | ✓ | ✓ | n/a (structured records, not a physical quantity) |
 | T11 | `compare_runs` | 2 | ✓ | ✓ | ✓ | ✓ | ✓ | n/a (structured diff, not a physical quantity) |
 | T12 | `retrieve_literature` | 2 | ✓ (plain keyword search, not embedding/RAG — see below) | ✓ | ✓ | ✓ | ✓ | n/a (returns cited text, not a physical quantity) |
+
+**All 12 tools are now implemented.** Every one carries at least one
+honest scope caveat (see the per-tool notes throughout this document) —
+none of them do exactly what the original TRD sketch described, because
+that sketch was written before anyone checked what HoloForge actually
+computes. That gap-finding, not the wiring itself, was most of the work.
 
 **computed** — HoloForge actually computes this quantity and the adapter
 call into it works.
@@ -247,3 +253,90 @@ Implementing T12 surfaced two more real bugs, fixed in the same pass:
    this). Same root cause as the error-text gap from Set B's b14, just
    not limited to failure records. Fixed by generalizing
    `_walk_numeric_leaves` itself; see `docs/set_c_matching_rule.md`.
+
+## Milestone 2 continued: T1, T4, T5, T9 implemented — all 12 tools done
+
+Same discipline as T2/T10/T11/T12: the Explore agent's earlier
+verdict for all four was "partially supportable," so each is scoped to
+exactly the real HoloForge capability, never past it.
+
+**T4 (`get_medium_state`) — the cleanest of the four.**
+`NPDDRecorder.forward(..., return_history=True)` (`holomedia/npdd.py`)
+genuinely returns `(u, N)` at every timestep in one pass — confirmed by
+reading the class directly. `dn` at a requested timestep is derived by
+applying the SAME formula the class uses for its final step
+(`dn_max * tanh(1.5*N)`) to that step's `N`, not new physics. Honest gap:
+dye-depletion state (`d`) is tracked internally but not included in
+`return_history`'s captured tuples — reconstructing it would mean
+re-deriving its bleaching recurrence outside the frozen class, which
+crosses from "calling HoloForge differently" into "writing new
+physics-adjacent code." `ToolResult.value["dye_state_d"]` is explicitly
+`None`, not omitted, so a caller knows the gap exists rather than
+inferring it from a missing key. Interesting real finding while testing:
+the tool reproduces Set A q06's documented non-monotonic-saturation
+result directly (dn1 amplitude at an early timestep exceeded a later
+one) — the tool wasn't built to demonstrate that, it just did.
+
+**T5 (`reconstruct_wavefront`) — scoped to the Kogelnik analytic tier
+only.** `holomedia.kogelnik_de(dtheta=...)` (`holomedia/diffraction.py`)
+is the only place in HoloForge with a real, tested, wired-in
+reconstruction-angle parameter (exercised by
+`experiments/fit_literature_curves.py::simulate_angular_de`). The actual
+BPM engine everything else in this registry uses (`SlabBPM`, what
+`run_method`/T2/T7 call) has no angle parameter at all — always normal
+incidence, confirmed by reading its signature and every call site in the
+repo. `SlabBPM` does accept an `incident=` field that could in principle
+carry a tilted wavefront, but zero call sites anywhere in HoloForge ever
+do this — wrapping it would mean exercising a real but never-validated
+path, not a verified capability, so T5 doesn't. Verified live: efficiency
+peaks at Bragg match and drops sharply when detuned, as physically
+expected.
+
+**T9 (`run_parameter_sweep`) — real batching for one axis, honest
+looping for the other.** Confirmed real, bit-identical-to-unbatched
+batching exists (`holomedia/optimize.py`'s `_batched` functions,
+HoloForge's own `tests/test_smoke.py` verifies the equivalence) — but
+only over a `(target, seed)` axis, for 4 of 7 methods (MIL, BSGD, GS,
+ORC — not LPC, SAT, ORU). Sweeping physical medium parameters is NOT
+batched anywhere in HoloForge: every real sweep script in the repo loops
+in Python, because `kappa`/`D0`/`sigma`/etc. are baked into
+`NPDDRecorder`'s and `SlabBPM`'s per-instance FFT buffers at
+construction — one instance cannot represent multiple parameter settings
+at once. T9 does the same: `sweep_field="seed"` with a batchable
+`method_id` gets real batched execution; anything else gets an honest
+Python loop, and `ToolResult.value["batched"]` says which happened — a
+medium-parameter sweep is never presented as batching HoloForge doesn't
+have. Bug caught during testing, not after: the loop fallback originally
+tried to inject `sweep_field="seed"` as a `MediumParams` override key
+when a non-batchable method fell back to it (e.g. LPC), which isn't a
+real field — `TypeError: MediumParams.__init__() got an unexpected
+keyword argument 'seed'`. Fixed to branch on `sweep_field == "seed"`
+explicitly rather than treating every sweep axis the same way.
+
+**T1 (`get_phase_map`) — rescoped hardest of all, name included.** No
+optimizer method in HoloForge ever snapshots intermediate field state —
+confirmed by reading every method in `holomedia/optimize.py`: each
+overwrites `E`/`dn`/`recon` in place every loop pass and returns only the
+final post-loop state. There is no native checkpoint/resume mechanism.
+What IS real: HoloForge's seeding is genuinely deterministic
+(`_seeded_init_theta` uses a CPU-local `torch.Generator`, explicitly not
+CUDA, explicitly for bit-reproducibility per its own comment) and every
+optimizer step is deterministic given that seed. So calling the same
+method with the same seed and `n_iters=checkpoint` reproduces the exact
+trajectory up to that point — verified live, not assumed: two identical
+calls to T1 produced bit-identical `exposure_field` arrays. This is NOT a
+free snapshot lookup: reading 5 different checkpoints means 5 separate
+full re-optimizations from scratch. And "phase map" is a misnomer kept
+only as the tool's registered name — HoloForge's BPM formulation is
+real-valued (intensity), never phase-resolved, so no phase is returned
+(`ToolResult.value["phase"]` is explicitly `None`). Under the hood this
+calls the exact same `HoloForgeAdapter.run_method_with_field` T2 uses,
+just reframed as "state at iteration k" rather than "final result."
+
+Implementing these four retired the last of the stale "stub" claims in
+Set B: `b01`/`b03`/`b04`/`b05` (which claimed T1/T4/T5/T9 were stubs)
+were removed as false, same pattern as the four before them. Set B is
+now 35 questions (was 43) — `_STUB_TOOL_CALLS` in
+`tests/test_set_b_questions.py` is now empty because there are no
+remaining stub tools to check, kept as an empty dict rather than deleted
+in case a future phase adds one.

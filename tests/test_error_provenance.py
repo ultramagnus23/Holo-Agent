@@ -29,22 +29,28 @@ def test_record_error_persists_a_failed_call(tmp_path):
 
 
 def test_orchestrator_records_failed_calls_as_error_run_ids(tmp_path):
+    """Uses a real tool called with a non-numeric value (a proven ToolError
+    case -- see tests/test_tool_error_wrapping.py) rather than a stub tool:
+    all 12 tools are implemented now (T1/T4/T5/T9 wired since this test was
+    first written), so there's no longer a stub to reach for here."""
     store = ProvenanceStore(tmp_path / "runs.sqlite3")
     script = [
         ModelStep(
-            tool_calls=[ToolCall(id="c1", name="get_phase_map", arguments={"run_id": "x", "checkpoint": 1})],
+            tool_calls=[
+                ToolCall(id="c1", name="check_validity_region", arguments={"medium_params": {"D0": "very_high"}})
+            ],
             final_text=None,
         ),
-        ModelStep(tool_calls=[], final_text="That tool isn't available yet."),
+        ModelStep(tool_calls=[], final_text="That value can't be checked."),
     ]
     orchestrator = Orchestrator(store, ScriptedBackend(script))
 
-    answer = orchestrator.answer("phase map?")
+    answer = orchestrator.answer("is D0=very_high valid?")
 
     assert answer.run_ids == []
     assert len(answer.error_run_ids) == 1
     row = store.get(answer.error_run_ids[0])
-    assert row is not None and "NotImplementedError" in row["diagnostic"]
+    assert row is not None and "TypeError" in row["diagnostic"]
     store.close()
 
 

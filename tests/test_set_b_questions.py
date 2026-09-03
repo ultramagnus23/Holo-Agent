@@ -21,17 +21,15 @@ from holoagent.tools.registry import get_tool, list_tools
 # Tool + minimal valid args for each no_tool_exists question that names a
 # specific stub, so this test breaks loudly the day someone wires it up
 # for real -- a stale Set B claim would otherwise sit there silently wrong.
-_STUB_TOOL_CALLS = {
-    "b01_phase_map_stub": ("get_phase_map", dict(run_id="x", checkpoint=1)),
-    "b03_medium_state_over_time_stub": ("get_medium_state", dict(run_id="x", timestep=1)),
-    "b04_wavefront_reconstruction_angle_stub": ("reconstruct_wavefront", dict(run_id="x", viewing_angle_deg=1.0)),
-    "b05_parameter_sweep_stub": ("run_parameter_sweep", dict(parameter_grid={"kappa": [1.0]}, outputs=["psnr"])),
-}
-# T2 (get_diffraction_efficiency), T10 (query_run_store), T11 (compare_runs),
-# T12 (retrieve_literature) were real stubs when b02/b06/b07/b08 were
-# written; now implemented (this session) -- their Set B entries were
-# removed from set_b.jsonl as stale rather than left to silently claim
-# something false. See git history for the removal commits.
+#
+# Currently empty: ALL 12 tools (T1-T12) are implemented as of this
+# session (T1/T4/T5/T9 wired last, after T2/T10/T11/T12) -- there is no
+# stub tool left to check. b01/b03/b04/b05 (which claimed T1/T4/T5/T9 were
+# stubs) were removed from set_b.jsonl as stale, same pattern as
+# b02/b06/b07/b08 before them. See git history for the removal commits.
+# Kept as a dict (not deleted) so a future Phase-3 stub has somewhere to
+# register this same check.
+_STUB_TOOL_CALLS: dict[str, tuple[str, dict]] = {}
 
 # question id -> (tool_name, kwargs) that must actually raise ToolError today.
 _TOOL_ERRORED_CALLS = {
@@ -94,10 +92,10 @@ _OUTSIDE_REGION_CALLS = {
 
 
 def test_set_b_has_questions():
-    # Was 43, now 39 -- b02/b06/b07/b08 were retired as stale once T2/T10/
-    # T11/T12 became real tools (see git history), not padded back up to a
-    # round number with lower-quality filler entries.
-    assert len(load_questions()) >= 35
+    # Was 43, now 35 -- b02/b06/b07/b08/b01/b03/b04/b05 were retired as
+    # stale once all 12 tools became real (see git history), not padded
+    # back up to a round number with lower-quality filler entries.
+    assert len(load_questions()) >= 30
 
 
 def test_every_question_has_verification_note():
