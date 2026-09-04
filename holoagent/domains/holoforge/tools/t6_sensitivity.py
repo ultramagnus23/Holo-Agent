@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import math
 
-from holoagent.physics import get_default_adapter
+from holoagent.domains.holoforge.physics import get_default_adapter
 from holoagent.tools._util import call_adapter, compute_input_hash, new_run_id
 from holoagent.tools.contract import MissingParameterError, ToolResult
 from holoagent.tools.registry import register

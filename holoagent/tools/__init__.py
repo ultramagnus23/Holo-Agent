@@ -1,22 +1,23 @@
-"""HoloForge-wrapping tools. Import this package to populate the registry.
+"""Core tool infrastructure: the typed contract (contract.py) and the
+registry (registry.py) every domain plugin's tools register into. This
+package itself is domain-agnostic -- it has no knowledge of HoloForge or
+any other physics backend (master-build Milestone 3: separate HoloAgent's
+core from domain-specific tools; see holoagent/domains/__init__.py).
 
-Per TRD §5 streamlining rule, the registry (holoagent.tools.registry) is the
-only public surface the orchestrator sees — no other path into the physics
-core is exposed.
+Populating the registry with actual tools is a domain plugin's job, done
+by importing it (e.g. `import holoagent.domains.holoforge`) -- that
+import's side effect is every tool in that domain calling
+@register(...). For backward compatibility, since HoloForge is currently
+the only bundled domain and a lot of existing code (including most of
+this project's own tests) still does `import holoagent.tools` expecting
+the registry to already be populated, importing THIS package also loads
+the holoforge domain by default. A second domain, once one exists, would
+need its own explicit `import holoagent.domains.<name>` -- this package
+will not guess which domains a caller wants; the default-load behavior
+here is a one-domain-era convenience, not a general plugin-discovery
+mechanism.
 """
 
-from holoagent.tools import (  # noqa: F401  (imported for registration side effects)
-    t1_phase_map,
-    t2_diffraction_efficiency,
-    t3_fit_quality,
-    t4_medium_state,
-    t5_reconstruct_wavefront,
-    t6_sensitivity,
-    t7_convergence_trace,
-    t8_validity_region,
-    t9_parameter_sweep,
-    t10_query_run_store,
-    t11_compare_runs,
-    t12_retrieve_literature,
-)
-from holoagent.tools.registry import get_tool, list_tools  # noqa: F401
+from holoagent.tools.registry import get_tool, list_tools, register  # noqa: F401
+
+import holoagent.domains.holoforge  # noqa: F401  (registration side effect -- see module docstring)

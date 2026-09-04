@@ -11,7 +11,7 @@ What IS genuinely spatially resolved is the reconstructed intensity field
 (SlabBPM.forward's output, real-valued |E|^2) — computed internally by
 every method but discarded by experiments/methods.py::run_method before
 it returns. T2 exposes that discarded field (via
-holoagent.physics.holoforge_adapter.HoloForgeAdapter.run_method_with_field,
+holoagent.domains.holoforge.adapter.HoloForgeAdapter.run_method_with_field,
 which calls the exact same underlying per-method functions run_method
 does — not a reimplementation), alongside the same scalar efficiency T7
 already reports, so this tool adds real information rather than
@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import math
 
-from holoagent.physics import get_default_adapter
+from holoagent.domains.holoforge.physics import get_default_adapter
 from holoagent.tools._util import call_adapter, compute_input_hash, new_run_id
 from holoagent.tools.contract import ToolResult
 from holoagent.tools.registry import register

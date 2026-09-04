@@ -87,7 +87,7 @@ checks is hand-transcribed from two places in the HoloForge repo that are
 prose, not enforced constraints: `MediumParams`'s docstring ("Literature
 ranges") in `holomedia/npdd.py`, and the K = 1.96–15.71 rad/µm range
 written down in `docs/validation_standard.md` / `docs/parameter_provenance.md`.
-See `holoagent/physics/holoforge_adapter.py`'s `MEDIUM_PARAM_LITERATURE_BOUNDS`
+See `holoagent/domains/holoforge/adapter.py`'s `MEDIUM_PARAM_LITERATURE_BOUNDS`
 and `VALIDATED_K_RANGE_RAD_PER_UM`. Unlike T3/T7 (which call live HoloForge
 code), T8 has no automated link back to HoloForge — if those source docs
 change, T8 goes stale silently until someone re-checks it by hand.
@@ -231,7 +231,7 @@ corpus this size (~750 lines across ~10 real HoloForge markdown files —
 index buys nothing a substring search doesn't already get, and adds a
 failure mode this project can't afford: a semantic "near match" that
 isn't the passage the answer actually relies on.
-`holoagent/tools/_literature_corpus.py` chunks the real files on blank
+`holoagent/domains/holoforge/literature_corpus.py` chunks the real files on blank
 lines and scores by raw keyword occurrence count; every returned passage
 is a verbatim substring of a real file with a `file:line` citation — the
 tool never summarizes or paraphrases, so "unsupported text generation"

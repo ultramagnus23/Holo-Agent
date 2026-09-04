@@ -1,6 +1,6 @@
 """T12 retrieve_literature — Cited passages from the curated corpus (Tier B).
 
-Phase 2 tool (TRD §8). Backed by holoagent.tools._literature_corpus: plain
+Phase 2 tool (TRD §8). Backed by holoagent.domains.holoforge.literature_corpus: plain
 keyword search over HoloForge's own real markdown docs
 (docs/*.md, README.md, REPRODUCE.md, CHANGELOG.md,
 data/literature/README.md) -- see that module's docstring for why this is
@@ -12,7 +12,7 @@ threshold means an empty result, not a lower-confidence guess.
 
 from __future__ import annotations
 
-from holoagent.tools._literature_corpus import search
+from holoagent.domains.holoforge.literature_corpus import search
 from holoagent.tools._util import compute_input_hash, new_run_id
 from holoagent.tools.contract import ToolResult
 from holoagent.tools.registry import register

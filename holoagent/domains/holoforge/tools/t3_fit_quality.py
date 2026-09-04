@@ -1,7 +1,7 @@
 """T3 get_fit_quality — NRMSE per region + parameter set (twin validation).
 
 Phase 1 tool (TRD §8). Wired to HoloForge via
-holoagent.physics.holoforge_adapter through
+holoagent.domains.holoforge.adapter through
 experiments/fit_literature_curves.py::fit_curve.
 
 Requires digitized reference (x, y) data — this tool does not fabricate
@@ -26,7 +26,7 @@ for what the fit actually used.
 
 from __future__ import annotations
 
-from holoagent.physics import get_default_adapter
+from holoagent.domains.holoforge.physics import get_default_adapter
 from holoagent.tools._util import call_adapter, compute_input_hash, new_run_id
 from holoagent.tools.contract import ToolResult
 from holoagent.tools.registry import register

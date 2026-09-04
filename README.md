@@ -164,15 +164,32 @@ repo's history.
 
 ## Layout
 
+Master-build Milestone 3 (plugin architecture): the generic core no
+longer knows anything about HoloForge. Domain-specific tools live under
+`domains/`, one self-contained plugin package per domain; the core
+imports nothing from there, only the reverse. HoloForge is currently the
+only domain — a future one (e.g. general wave optics) would be a sibling
+package under `domains/`, without touching anything below.
+
 ```
 holoagent/
-  router/         Tier A/B/C classification (layer 1) -- stub
-  orchestrator/    Tool-calling loop, ModelBackend protocol (backend.py),
-                   Ollama backend (ollama_backend.py), escalation templates (layer 2)
-  tools/           Typed HoloForge-wrapping tools T1-T12 (layer 3) -- T3/T6/T7/T8 real
-  physics/         Adapter to the (unmodified) HoloForge repo (layer 4 boundary)
-  provenance/      SQLite-backed run store
-  eval/            Set A (grounded) / Set B (abstention) / Set C (provenance audit)
+  router/          Tier A/B/C classification (layer 1) -- stub
+  orchestrator/     Tool-calling loop, ModelBackend protocol (backend.py),
+                    Ollama backend (ollama_backend.py), escalation templates,
+                    the runtime evidence-validator gate (layer 2) -- CORE
+  tools/            The tool contract (contract.py) and registry (registry.py)
+                    every domain's tools register into -- CORE, domain-agnostic
+  provenance/       SQLite-backed run store, session-scoped store context -- CORE
+  eval/             Set A (grounded) / Set B (abstention) / Set C (provenance
+                    audit) -- CORE (eval/questions/*.jsonl is HoloForge-domain
+                    data, not core, but hasn't been relocated yet)
+  domains/
+    holoforge/      The holoforge domain plugin -- ALL 12 tools (T1-T12),
+                    real, tested against live HoloForge
+      adapter.py     The one crossing point into the frozen HoloForge repo
+      physics.py      get_default_adapter() singleton
+      literature_corpus.py  Plain keyword search backing T12
+      tools/          t1_phase_map.py ... t12_retrieve_literature.py
 docs/
   PRD.md, TRD.md, orchestrator_system_prompt.md, tool_coverage_matrix.md,
   set_c_matching_rule.md

@@ -1,7 +1,7 @@
 """T7 get_convergence_trace — Full optimizer trajectory, not just the endpoint.
 
 Phase 1 tool (TRD §8). Wired to HoloForge via
-holoagent.physics.holoforge_adapter through
+holoagent.domains.holoforge.adapter through
 experiments/methods.py::run_method — the one stable, tested, uniform
 dispatch boundary in HoloForge (part2/code/tests/test_method_registry.py).
 
@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import math
 
-from holoagent.physics import get_default_adapter
+from holoagent.domains.holoforge.physics import get_default_adapter
 from holoagent.tools._util import call_adapter, compute_input_hash, new_run_id
 from holoagent.tools.contract import ToolResult
 from holoagent.tools.registry import register

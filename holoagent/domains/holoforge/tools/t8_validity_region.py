@@ -13,7 +13,7 @@ pipeline reads or enforces:
      K = 1.96-15.71 rad/um range the twin was actually fit and tested
      against, written down by a human after the fact, not computed.
 
-See holoagent/physics/holoforge_adapter.py for the transcribed bound
+See holoagent/domains/holoforge/adapter.py for the transcribed bound
 tables themselves (MEDIUM_PARAM_LITERATURE_BOUNDS,
 VALIDATED_K_RANGE_RAD_PER_UM). If those source documents change, this
 tool goes stale silently unless someone re-checks it by hand — there is
@@ -23,7 +23,7 @@ unlike T3/T7 which call live code.
 
 from __future__ import annotations
 
-from holoagent.physics import get_default_adapter
+from holoagent.domains.holoforge.physics import get_default_adapter
 from holoagent.tools._util import call_adapter, compute_input_hash, new_run_id
 from holoagent.tools.contract import ToolResult
 from holoagent.tools.registry import register

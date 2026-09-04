@@ -1,4 +1,4 @@
-from holoagent.physics.holoforge_adapter import HoloForgeAdapter  # noqa: F401
+from holoagent.domains.holoforge.adapter import HoloForgeAdapter  # noqa: F401
 
 _default_adapter: HoloForgeAdapter | None = None
 

@@ -1,7 +1,8 @@
 """Tests for T12 (retrieve_literature) and its backing keyword-search
-corpus (holoagent.tools._literature_corpus). Needs the real HoloForge
-checkout's docs/ on disk (same as everything else), but is fast -- plain
-keyword scoring over ~750 lines of markdown, no model/compute involved.
+corpus (holoagent.domains.holoforge.literature_corpus). Needs the real
+HoloForge checkout's docs/ on disk (same as everything else), but is fast
+-- plain keyword scoring over ~750 lines of markdown, no model/compute
+involved.
 """
 
 import pytest
@@ -9,7 +10,7 @@ import pytest
 pytest.importorskip("torch")
 
 import holoagent.tools  # noqa: F401  (registers T1-T12)
-from holoagent.tools._literature_corpus import build_corpus, search
+from holoagent.domains.holoforge.literature_corpus import build_corpus, search
 from holoagent.tools.registry import get_tool
 
 
@@ -42,7 +43,7 @@ def test_passages_are_verbatim_with_citations():
     passage, _ = results[0]
     from pathlib import Path
 
-    from holoagent.tools._literature_corpus import DEFAULT_CORPUS_ROOT
+    from holoagent.domains.holoforge.literature_corpus import DEFAULT_CORPUS_ROOT
 
     full_text = (DEFAULT_CORPUS_ROOT / passage.file).read_text(encoding="utf-8", errors="replace")
     assert passage.text in full_text

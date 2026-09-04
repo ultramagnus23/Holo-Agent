@@ -3,7 +3,7 @@ tool function, for T10 (query_run_store) and T11 (compare_runs) -- the two
 tools whose entire job is reading provenance, not HoloForge.
 
 Every other tool (T3/T6/T7/T8) reaches its backend via
-holoagent.physics.get_default_adapter(), a process-wide singleton -- that's
+holoagent.domains.holoforge.physics.get_default_adapter(), a process-wide singleton -- that's
 correct there because there's exactly one HoloForge checkout. It would be
 WRONG here: each Orchestrator (each test, each session) has its own
 ProvenanceStore instance, often backed by a throwaway file. A module-level

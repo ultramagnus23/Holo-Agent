@@ -5,7 +5,7 @@ ProvenanceStore, not HoloForge -- wired via
 holoagent.provenance.context.get_current_store(), the session-scoped
 store the active Orchestrator.answer() call set (see that module's
 docstring for why this can't be a global default the way
-holoagent.physics.get_default_adapter() is for HoloForge).
+holoagent.domains.holoforge.physics.get_default_adapter() is for HoloForge).
 
 Filtering is intentionally simple, not a general query language: equality
 on `tool` and on `failed` (a real vs. errored call, see
