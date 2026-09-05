@@ -153,14 +153,35 @@ platform — a plugin architecture separating agent core from domain tools,
 a full general wave-optics/Fourier-optics/imaging/phase-retrieval tool
 library validated against analytic reference cases, a claim validator
 beyond numeric tokens, research sessions, and automatic hypothesis
-testing. That document's own §37 says not to build it all at once. What's
-implemented from it so far: the runtime evidence-validator gate above
-(its §3, the most architecturally significant single gap). Everything
-else it describes — Milestones 2 through 8 — is genuinely a multi-month
-undertaking, not a same-session extension, and is not started. Treat the
-"Status" section above as the accurate current state; do not infer a
-general optics platform exists from that document's presence in this
-repo's history.
+testing. That document's own §37 says not to build it all at once, and
+this project has followed that literally rather than faking broad
+progress. Done so far:
+
+- **Milestone 1** (harden current system) — the runtime evidence-validator
+  gate (§3), provenance-recorded failures, real Set A/B/C.
+- **Milestone 2** (complete HoloForge tools) — all 12 tools real, each
+  rescoped to HoloForge's actual capability with documented caveats.
+- **Milestone 3** (generalize architecture) — `holoagent/domains/` plugin
+  separation; core no longer knows HoloForge exists.
+- **Milestone 4, started** — a second domain,
+  `holoagent/domains/waveoptics/` (general scalar wave optics,
+  independent of HoloForge per §12's explicit instruction). 7 tools
+  (fields, propagation, one aperture type), 2 real analytic validations
+  (Fraunhofer sinc² diffraction, Gaussian-beam w(z) divergence via the
+  exact angular-spectrum method) — see
+  `docs/tool_coverage_matrix.md`'s Milestone 4 section for exactly what's
+  covered and what's explicitly not (no 2D circular aperture/Airy
+  pattern, no lenses/gratings/imaging/coherence/phase-retrieval yet).
+  Deliberately not auto-loaded into the default HoloForge-focused
+  orchestrator session — using it means an explicit
+  `import holoagent.domains.waveoptics`.
+
+Milestones 5-8 (imaging, phase retrieval/holography as a general
+capability, research knowledge, a full research agent) are not started —
+still a multi-month undertaking, not something a handful of sessions
+closes out. Treat the "Status" section above as the accurate current
+HoloForge-domain state; this note is what's true for the master-build
+document's own broader vision specifically.
 
 ## Layout
 

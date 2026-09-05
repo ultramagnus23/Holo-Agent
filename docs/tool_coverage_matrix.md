@@ -340,3 +340,75 @@ now 35 questions (was 43) — `_STUB_TOOL_CALLS` in
 `tests/test_set_b_questions.py` is now empty because there are no
 remaining stub tools to check, kept as an empty dict rather than deleted
 in case a future phase adds one.
+
+## Milestone 4: waveoptics domain (general wave optics, not HoloForge)
+
+A second domain plugin, `holoagent/domains/waveoptics/` — independent
+scalar wave optics, master-build §12's explicit instruction that
+HoloForge must not become a general optics engine. Deliberately narrow
+(master-build §38: depth over feature count; §37: do not build
+everything at once) — only Stage 1 (fields) and enough of Stages 2-3
+(propagation, apertures) to produce one real, independently-verified
+diffraction pattern and one real, independently-verified beam-divergence
+law, per §28's requirement that every new module has at least one
+analytic reference case.
+
+| Tool | computed | exposed | typed | tested | documented | validity-bounded |
+|---|---|---|---|---|---|---|
+| `create_plane_wave` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (Nyquist on the phase ramp) |
+| `create_gaussian_beam` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (grid width + resolution) |
+| `calculate_intensity` | ✓ | ✓ | ✓ | ✓ | ✓ | n/a (deterministic transform) |
+| `calculate_phase` | ✓ | ✓ | ✓ | ✓ | ✓ | n/a (deterministic transform) |
+| `apply_aperture` | ✓ (1D rect/slit only) | ✓ | ✓ | ✓ | ✓ | ✓ (aperture vs. grid extent) |
+| `propagate_angular_spectrum` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (spectral-content-aware, see below) |
+| `propagate_fraunhofer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (real Fraunhofer-distance check) |
+
+**Two analytic validations, both run through the actual registered tools
+(not the underlying physics functions in isolation)** —
+`tests/test_waveoptics_propagation.py`:
+
+1. A plane wave through a slit aperture, propagated to the far field via
+   `propagate_fraunhofer`, reproduces the exact analytic sinc² single-slit
+   diffraction pattern to <0.02 absolute intensity error (normalized
+   peak=1) — the FT-of-a-rect-is-a-sinc identity has no approximation to
+   go wrong, so this is a strong, near-exact check.
+2. A Gaussian beam propagated by `propagate_angular_spectrum` (the exact,
+   non-paraxial method) reproduces the paraxial `w(z) = w0*sqrt(1+(z/zR)²)`
+   divergence law to <0.1% relative error, at a gentle divergence angle
+   (w0=20µm, wavelength=0.5µm) where the paraxial approximation itself is
+   expected to hold well.
+
+**A real bug caught by the second validation, not assumed away:** the
+first Nyquist-sampling check written for `propagate_angular_spectrum`
+used the blanket worst-case rule `dx <= wavelength/2` (correct for
+representing *any* possible spatial frequency up to k) — this flagged
+the w0=20µm beam at dx=1.0µm as under-sampled (`in_validated_region:
+False`) even though it numerically matched its analytic w(z) to 0.01%.
+The rule was checking against a frequency band the field's actual
+content never touches (a gently-diverging beam's energy sits in a narrow
+band near kx=0, not spread to the theoretical maximum). Fixed by
+computing what fraction of the field's *real* spectral energy sits near
+the grid's Nyquist edge (outer 10% of the sampled frequency range)
+instead of a blanket bound — the same principle as the evanescent-energy
+check right next to it, just for aliasing risk instead of near-field
+loss. Confirmed the fix doesn't just paper over false positives:
+`create_plane_wave`'s own (unrelated, single-exact-frequency) Nyquist
+check still correctly flags a genuinely aliased tilted plane wave, and
+that aliasing is correctly *not* re-detectable downstream by
+`propagate_angular_spectrum` once it's already baked into the discrete
+samples — confirming each tool validates at the point where it can
+actually see the problem, not after the fact.
+
+**Explicitly not built, not a gap left unstated:** a true 2D circular
+aperture (this domain is 1D transverse fields only, matching the
+holoforge domain's own convention — a 1D slit of some half-width does
+NOT reproduce the Airy pattern master-build §28 names, which needs real
+2D radial symmetry; rather than build a mislabeled stand-in, that
+validation case is not attempted). No lenses, phase masks, gratings,
+imaging (PSF/OTF/MTF), coherence, or phase retrieval — Stages 3
+(remainder), 4, 5, and master-build Milestones 5-8 generally.
+
+This domain is deliberately NOT auto-loaded by `holoagent.tools`'s
+backward-compatible default (see that module's docstring) — it's a
+second domain now, not the one-domain-era special case. Using it means
+an explicit `import holoagent.domains.waveoptics`.
