@@ -1,6 +1,7 @@
 """Fourier optics / 4f imaging system (master-build §13 Stage 4), plus a
-diffraction-limited incoherent imaging system's PSF/OTF/MTF (master-build
-Milestone 5's first slice).
+diffraction-limited incoherent imaging system's PSF/OTF/MTF and an
+end-to-end object-to-image simulation through it (master-build
+Milestone 5).
 
 A real 4f system (object -> lens(f) -> Fourier plane, f -> lens(f) ->
 image plane, total distance 4f) does two things to a coherent field:
@@ -49,6 +50,21 @@ def apply_fourier_filter(field: np.ndarray, dx: float, cutoff_um_inv: float, fil
     return np.fft.ifft(F * mask.astype(complex))
 
 
+def _incoherent_otf_natural_order(n_x: int, dx: float, cutoff_um_inv: float) -> np.ndarray:
+    """Shared core of compute_incoherent_psf_otf and
+    image_through_incoherent_system: the OTF, in numpy's natural
+    (unshifted) FFT order, matching the natural-order fx=fftfreq(n_x, dx)
+    grid used throughout this module. See compute_incoherent_psf_otf's own
+    docstring for the physics and validation.
+    """
+    fx = np.fft.fftfreq(n_x, d=dx)
+    pupil = (np.abs(fx) <= cutoff_um_inv).astype(complex)
+    coherent_psf = np.fft.ifft(pupil)
+    incoherent_psf = np.abs(coherent_psf) ** 2
+    otf_raw = np.fft.fft(incoherent_psf)
+    return otf_raw / otf_raw[0]
+
+
 def compute_incoherent_psf_otf(n_x: int, dx: float, cutoff_um_inv: float) -> dict:
     """Diffraction-limited incoherent imaging system with a hard-edged
     circular... no -- 1D rect pupil of coherent cutoff cutoff_um_inv (the
@@ -84,15 +100,10 @@ def compute_incoherent_psf_otf(n_x: int, dx: float, cutoff_um_inv: float) -> dic
     # make_x_axis(n_x, dx), checked numerically before writing this).
     fx = np.fft.fftfreq(n_x, d=dx)
     pupil = (np.abs(fx) <= cutoff_um_inv).astype(complex)
-
     coherent_psf = np.fft.ifft(pupil)
     incoherent_psf = np.abs(coherent_psf) ** 2
 
-    # OTF via the FFT autocorrelation theorem: fft of the incoherent_psf
-    # (still in natural order, so its fft is correctly labeled by the same
-    # natural-order fx above -- no shift needed here).
-    otf_raw = np.fft.fft(incoherent_psf)
-    otf = (otf_raw / otf_raw[0]).real
+    otf = _incoherent_otf_natural_order(n_x, dx, cutoff_um_inv).real
     mtf = np.abs(otf)
 
     x_um = np.fft.fftshift(np.fft.fftfreq(n_x, d=1.0 / (n_x * dx)))
@@ -111,3 +122,33 @@ def compute_incoherent_psf_otf(n_x: int, dx: float, cutoff_um_inv: float) -> dic
         coherent_cutoff_um_inv=cutoff_um_inv,
         otf_cutoff_um_inv=2.0 * cutoff_um_inv,
     )
+
+
+def image_through_incoherent_system(object_intensity: np.ndarray, dx: float, cutoff_um_inv: float) -> np.ndarray:
+    """Simulate imaging object_intensity (a real, non-negative intensity
+    distribution -- NOT a field amplitude) through the diffraction-limited
+    incoherent system compute_incoherent_psf_otf characterizes. The
+    incoherent imaging equation is a real-space convolution with the
+    system's PSF; computed here in the frequency domain via the
+    already-validated OTF: image(x) = IFFT(FFT(object(x)) * OTF(fx)).
+
+    object_intensity must be in the SAME centered (make_x_axis) order as
+    every other array in this domain -- converted internally to/from the
+    natural FFT order _incoherent_otf_natural_order uses.
+
+    Validated (tests/test_waveoptics_imaging.py), two ways:
+    1. Linearity/shift-invariance: imaging two point sources gives exactly
+       (to machine precision) the sum of each point's own PSF, shifted --
+       the defining property of a convolution, checked directly rather
+       than assumed because it used the FFT product code path.
+    2. The operational meaning of MTF: imaging a sinusoidal intensity
+       object of contrast m at spatial frequency f0 reduces the imaged
+       contrast to m*MTF(f0) -- matched to <0.1% relative error against
+       the same triangle-function OTF compute_incoherent_psf_otf itself
+       validates.
+    """
+    n_x = len(object_intensity)
+    object_natural = np.fft.ifftshift(object_intensity)
+    otf = _incoherent_otf_natural_order(n_x, dx, cutoff_um_inv)
+    image_natural = np.fft.ifft(np.fft.fft(object_natural) * otf).real
+    return np.fft.fftshift(image_natural)

@@ -23,10 +23,11 @@ Layout:
   imaging.py          apply_fourier_filter (idealized 4f-system
                      lowpass/highpass spatial-frequency filter) /
                      compute_incoherent_psf_otf (Milestone 5: PSF/OTF/MTF
-                     of a diffraction-limited incoherent imaging system)
-                     physics
+                     of a diffraction-limited incoherent imaging system) /
+                     image_through_incoherent_system (convolve a real
+                     object intensity through that system) physics
   serialization.py   JSON <-> complex-array field representation
-  tools/             T1-T12 (waveoptics numbering restarts at its own T1;
+  tools/             T1-T13 (waveoptics numbering restarts at its own T1;
                      these are NOT the same T-numbers as the holoforge
                      domain's T1-T12 -- tool identity is by registered
                      name, not number, across domains)
@@ -45,4 +46,5 @@ from holoagent.domains.waveoptics.tools import (  # noqa: F401  (registration si
     apply_fourier_filter,
     apply_double_slit,
     compute_incoherent_psf_otf,
+    image_through_incoherent_system,
 )

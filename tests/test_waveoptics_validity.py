@@ -192,3 +192,23 @@ def test_incoherent_otf_cutoff_within_grid_nyquist_is_valid():
     result = get_tool("compute_incoherent_psf_otf").fn(n_x=256, dx=dx, cutoff_um_inv=nyquist * 0.2)
     assert result.in_validated_region is True
     assert result.diagnostic is None
+
+
+def test_image_through_incoherent_system_cutoff_beyond_nyquist_is_flagged():
+    dx = 1.0
+    nyquist = 1.0 / (2.0 * dx)
+    result = get_tool("image_through_incoherent_system").fn(
+        object_intensity=[1.0] * 256, dx=dx, cutoff_um_inv=nyquist * 0.6
+    )
+    assert result.in_validated_region is False
+    assert "aliased" in result.diagnostic
+
+
+def test_image_through_incoherent_system_cutoff_within_nyquist_is_valid():
+    dx = 1.0
+    nyquist = 1.0 / (2.0 * dx)
+    result = get_tool("image_through_incoherent_system").fn(
+        object_intensity=[1.0] * 256, dx=dx, cutoff_um_inv=nyquist * 0.2
+    )
+    assert result.in_validated_region is True
+    assert result.diagnostic is None

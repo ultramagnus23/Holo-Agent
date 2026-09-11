@@ -122,3 +122,64 @@ def test_incoherent_imaging_resolves_finer_detail_than_coherent_of_same_pupil():
     result = get_tool("compute_incoherent_psf_otf").fn(n_x=2048, dx=0.05, cutoff_um_inv=fc)
     assert result.value["otf_cutoff_um_inv"] > result.value["coherent_cutoff_um_inv"]
     assert result.value["otf_cutoff_um_inv"] == 2.0 * result.value["coherent_cutoff_um_inv"]
+
+
+def test_image_through_incoherent_system_is_linear_and_shift_invariant():
+    # Imaging two point sources must give exactly the sum of each point's
+    # own image (the defining property of a convolution), checked to
+    # machine precision through the tool's actual FFT-product code path --
+    # not assumed because "it's a convolution."
+    n_x, dx = 4096, 0.05
+    fc = 2.0
+
+    single = [0.0] * n_x
+    single[n_x // 2] = 1.0 / dx
+    img_single = np.array(
+        get_tool("image_through_incoherent_system").fn(
+            object_intensity=single, dx=dx, cutoff_um_inv=fc
+        ).value["image_intensity"]
+    )
+
+    shift = 200
+    double = [0.0] * n_x
+    double[n_x // 2] = 1.0 / dx
+    double[n_x // 2 + shift] = 1.0 / dx
+    img_double = np.array(
+        get_tool("image_through_incoherent_system").fn(
+            object_intensity=double, dx=dx, cutoff_um_inv=fc
+        ).value["image_intensity"]
+    )
+
+    expected = img_single + np.roll(img_single, shift)
+    max_err = np.max(np.abs(img_double - expected))
+    assert max_err < 1e-9, f"linearity/shift-invariance violated: max err {max_err}"
+
+
+def test_image_through_incoherent_system_reduces_contrast_by_mtf():
+    # The operational definition of MTF: imaging a sinusoidal intensity
+    # object of contrast m at frequency f0 reduces the imaged contrast to
+    # m*MTF(f0) -- checked against the same triangle-function OTF
+    # compute_incoherent_psf_otf itself validates, via a wholly separate
+    # tool call (real-space object -> image, not frequency-space OTF
+    # lookup) so this is a genuine cross-check, not circular.
+    n_x, dx = 4096, 0.05
+    fc = 2.0
+    period_um = 3.0
+    m_in = 0.5
+
+    x = (np.arange(n_x) - n_x // 2) * dx
+    object_intensity = (1 + m_in * np.cos(2 * np.pi * x / period_um)).tolist()
+
+    result = get_tool("image_through_incoherent_system").fn(
+        object_intensity=object_intensity, dx=dx, cutoff_um_inv=fc
+    )
+    image = np.array(result.value["image_intensity"])
+
+    f0 = 1.0 / period_um
+    otf_at_f0 = max(0.0, 1 - abs(f0) / (2 * fc))  # analytic triangle OTF, same as compute_incoherent_psf_otf
+    m_out_expected = m_in * otf_at_f0
+
+    center = slice(n_x // 2 - 500, n_x // 2 + 500)
+    m_out_measured = (image[center].max() - image[center].min()) / 2
+    rel_err = abs(m_out_measured - m_out_expected) / m_out_expected
+    assert rel_err < 0.01, f"m_out_expected={m_out_expected} measured={m_out_measured} rel_err={rel_err}"

@@ -350,9 +350,10 @@ HoloForge must not become a general optics engine. Deliberately narrow
 everything at once) — Stage 1 (fields), Stage 2 (propagation), most of
 Stage 3 (apertures, thin lens, grating), the core of Stage 4 (idealized
 4f-system spatial filtering), one Stage 5 case (Young's double slit), and
-now the first slice of master-build Milestone 5 (a diffraction-limited
-incoherent imaging system's PSF/OTF/MTF), each with a real,
-independently-verified analytic reference case per §28.
+now two pieces of master-build Milestone 5 (a diffraction-limited
+incoherent imaging system's PSF/OTF/MTF, plus actually imaging an object
+through it end to end), each with a real, independently-verified
+analytic reference case per §28.
 
 | Tool | computed | exposed | typed | tested | documented | validity-bounded |
 |---|---|---|---|---|---|---|
@@ -368,8 +369,9 @@ independently-verified analytic reference case per §28.
 | `apply_fourier_filter` | ✓ (hard-edged lowpass/highpass) | ✓ | ✓ | ✓ | ✓ | ✓ (cutoff vs. grid Nyquist frequency) |
 | `apply_double_slit` | ✓ (2 identical hard-edged slits) | ✓ | ✓ | ✓ | ✓ | ✓ (total extent vs. grid extent) |
 | `compute_incoherent_psf_otf` | ✓ (1D rect pupil only) | ✓ | ✓ | ✓ | ✓ | ✓ (OTF cutoff vs. grid Nyquist frequency) |
+| `image_through_incoherent_system` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (same OTF-cutoff-vs-Nyquist check) |
 
-**Seven analytic validations, all run through the actual registered tools
+**Eight analytic validations, all run through the actual registered tools
 (not the underlying physics functions in isolation)** —
 `tests/test_waveoptics_propagation.py` and
 `tests/test_waveoptics_imaging.py`:
@@ -445,6 +447,24 @@ independently-verified analytic reference case per §28.
    imaging resolves finer detail (up to `2·fc`) than coherent imaging
    through the identical pupil (up to `fc`) — asserted nowhere, checked
    directly in `tests/test_waveoptics_imaging.py`.
+8. `image_through_incoherent_system` (Milestone 5, second slice —
+   actually running a real object through the system compute_incoherent_
+   psf_otf only characterizes) is validated two ways, through the tool's
+   real FFT-product code path, not the underlying physics function in
+   isolation: **linearity/shift-invariance** — imaging two point sources
+   reproduces exactly (to machine precision, <1e-9) the sum of each
+   point's own image shifted apart, the defining property of a
+   convolution, checked rather than assumed; and **the operational
+   meaning of MTF** — imaging a sinusoidal intensity object of contrast m
+   at spatial frequency f0 reduces the imaged contrast to `m·MTF(f0)`,
+   matched to <1% relative error against the same triangle-function OTF
+   `compute_incoherent_psf_otf` itself validates (a genuine cross-check
+   across two separate tool calls, not circular) — this is also the
+   direct empirical grounding for what "OTF cutoff = 2·fc" (validation 7)
+   actually means for a caller: an object feature at a spatial frequency
+   within `(fc, 2·fc)` still forms a (contrast-reduced) image under this
+   system, even though it's beyond what the *coherent* cutoff alone
+   would resolve.
 
 **A real bug caught by the second validation, not assumed away:** the
 first Nyquist-sampling check written for `propagate_angular_spectrum`
@@ -482,16 +502,15 @@ own tool output). `apply_double_slit` is exactly 2 slits of fixed
 identical width — no general N-slit array (the N-slit array-factor
 formula was prototyped and found to need much finer grid resolution than
 the N=2 case to match cleanly at its narrower, higher-order interference
-peaks; not pursued further this session). `compute_incoherent_psf_otf` is
-1D and a hard-edged rect pupil only — no 2D circular pupil (so no formal
-Airy-disk-based Rayleigh criterion, consistent with this domain's
-1D-only convention throughout), no soft/apodized pupils, no way yet to
-actually run an object field THROUGH this incoherent system end to end
-(the tool characterizes the system's PSF/OTF/MTF, but doesn't yet
-convolve an arbitrary intensity object with the PSF to produce a
-simulated image). No coherence (partial/spatial coherence) or phase
-retrieval — the remainder of Stage 4, the remainder of Stage 5, and the
-rest of Milestone 5 plus Milestones 6-8 generally.
+peaks; not pursued further this session). `compute_incoherent_psf_otf`
+and `image_through_incoherent_system` are 1D and a hard-edged rect pupil
+only — no 2D circular pupil (so no formal Airy-disk-based Rayleigh
+criterion, consistent with this domain's 1D-only convention throughout),
+no soft/apodized pupils. No noise model (the simulated image is the
+exact, noiseless convolution result — no sensor noise, no quantization).
+No coherence (partial/spatial coherence) or phase retrieval — the
+remainder of Stage 4, the remainder of Stage 5, and the rest of
+Milestone 5 plus Milestones 6-8 generally.
 
 This domain is deliberately NOT auto-loaded by `holoagent.tools`'s
 backward-compatible default (see that module's docstring) — it's a

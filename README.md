@@ -176,19 +176,23 @@ progress. Done so far:
   what's covered and what's explicitly not (no 2D circular aperture/Airy
   pattern, no general/arbitrary phase masks, no soft/apodized filters, no
   general N-slit array).
-- **Milestone 5, started** — first slice: `compute_incoherent_psf_otf`,
-  the PSF/OTF/MTF of a diffraction-limited **incoherent** imaging system
-  with a hard-edged 1D rect pupil, in the same `waveoptics` domain. Its
-  own real analytic validation: the OTF is the pupil's normalized
-  autocorrelation (NOT the pupil function itself, which is only the
-  coherent case) — an exact closed-form triangle function with cutoff
-  2x the coherent pupil's, matched to <0.001 absolute error. See
+- **Milestone 5, started** — two tools in the same `waveoptics` domain:
+  `compute_incoherent_psf_otf`, the PSF/OTF/MTF of a diffraction-limited
+  **incoherent** imaging system with a hard-edged 1D rect pupil (real
+  analytic validation: the OTF is the pupil's normalized autocorrelation,
+  NOT the pupil function itself, which is only the coherent case — an
+  exact closed-form triangle function with cutoff 2x the coherent
+  pupil's, matched to <0.001 absolute error); and
+  `image_through_incoherent_system`, which actually runs a real intensity
+  object through that system end to end (validated two ways: exact
+  linearity/shift-invariance for two point sources, and the operational
+  meaning of MTF — a sinusoidal object's contrast is reduced by exactly
+  `MTF(f0)`, matched to <1% against the same triangle-function OTF). See
   `docs/tool_coverage_matrix.md` for exactly what's not built yet (2D
-  circular pupil / Airy-disk Rayleigh criterion, soft pupils, actually
-  convolving an object field through the system to produce a simulated
-  image, coherence, phase retrieval).
+  circular pupil / Airy-disk Rayleigh criterion, soft pupils, any noise
+  model, coherence, phase retrieval).
 
-`holoagent.domains.waveoptics` (12 tools total across Milestones 4-5, 7
+`holoagent.domains.waveoptics` (13 tools total across Milestones 4-5, 8
 real analytic validations) is deliberately not auto-loaded into the
 default HoloForge-focused orchestrator session — using it means an
 explicit `import holoagent.domains.waveoptics`.
