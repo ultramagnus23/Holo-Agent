@@ -1,12 +1,12 @@
-"""Optical elements: pure amplitude masks applied to a field (master-build
-§13 Stage 3 -- deliberately just the minimal slice needed to validate a
-real diffraction pattern this session; see docs/tool_coverage_matrix.md
-for what's explicitly not built yet: lenses, phase masks, gratings, and a
-true 2D circular aperture (this domain is 1D transverse fields only,
-matching the holoforge domain's own convention -- a 1D "circular" slit of
-some half-width would NOT reproduce the Airy pattern the master prompt's
-§28 names, since that needs real 2D radial symmetry; rather than build a
-mislabeled stand-in, that validation case is not attempted here at all).
+"""Optical elements: amplitude/phase masks applied to a field (master-build
+§13 Stage 3). apply_rect_aperture, apply_thin_lens, apply_grating are built;
+see docs/tool_coverage_matrix.md for what's still explicitly not built:
+general/arbitrary phase masks and a true 2D circular aperture (this domain
+is 1D transverse fields only, matching the holoforge domain's own
+convention -- a 1D "circular" slit of some half-width would NOT reproduce
+the Airy pattern the master prompt's §28 names, since that needs real 2D
+radial symmetry; rather than build a mislabeled stand-in, that validation
+case is not attempted here at all).
 """
 
 from __future__ import annotations
@@ -22,3 +22,40 @@ def apply_rect_aperture(field: np.ndarray, dx: float, width_um: float) -> np.nda
     x = make_x_axis(n_x, dx)
     mask = (np.abs(x) <= width_um / 2).astype(complex)
     return field * mask
+
+
+def apply_thin_lens(field: np.ndarray, dx: float, wavelength_um: float, focal_length_um: float) -> np.ndarray:
+    """Ideal thin lens (paraxial approximation): multiplies by the quadratic
+    phase transmission t(x) = exp(-i*k*x^2/(2f)). Positive focal_length_um
+    is converging.
+
+    Validated (tests/test_waveoptics_propagation.py) via the classic
+    Fourier-transforming-lens identity: a plane wave through an aperture
+    then this lens, propagated by the exact angular-spectrum method to
+    z=f, produces the same first-null position as the aperture's own
+    Fraunhofer diffraction pattern (wavelength*f/width) -- the well-known
+    paraxial result that a lens's back focal plane holds (a scaled) Fourier
+    transform of the field just before it (Goodman, Fourier Optics ch. 5).
+    """
+    n_x = len(field)
+    x = make_x_axis(n_x, dx)
+    k = 2 * np.pi / wavelength_um
+    lens_phase = np.exp(-1j * k * x**2 / (2 * focal_length_um))
+    return field * lens_phase
+
+
+def apply_grating(field: np.ndarray, dx: float, period_um: float) -> np.ndarray:
+    """Sinusoidal amplitude diffraction grating: multiplies by
+    t(x) = 0.5*(1 + cos(2*pi*x/period)) -- transmission oscillating between
+    0 and 1, period period_um. Produces exactly 3 diffraction orders
+    (0, +1, -1; a sinusoidal grating has no higher orders), at far-field
+    angles sin(theta_m) = m*wavelength/period.
+
+    Validated (tests/test_waveoptics_propagation.py): far-field intensity
+    peaks at the analytic +-1 order positions x_m = m*wavelength*z/period,
+    with >99% of far-field power in exactly those 3 orders.
+    """
+    n_x = len(field)
+    x = make_x_axis(n_x, dx)
+    transmission = 0.5 * (1 + np.cos(2 * np.pi * x / period_um))
+    return field * transmission

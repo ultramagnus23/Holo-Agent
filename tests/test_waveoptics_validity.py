@@ -69,3 +69,47 @@ def test_aperture_wider_than_grid_is_flagged():
 def test_field_real_imag_length_mismatch_raises_tool_error():
     with pytest.raises(ToolError):
         get_tool("calculate_intensity").fn(field={"real": [1.0, 2.0], "imag": [1.0]})
+
+
+def test_thin_lens_fast_aperture_violates_paraxial_bound_is_flagged():
+    # grid half-width comparable to f -- well outside the paraxial regime
+    plane = get_tool("create_plane_wave").fn(n_x=256, dx=1.0, wavelength_um=0.5)
+    result = get_tool("apply_thin_lens").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]},
+        dx=1.0,
+        wavelength_um=0.5,
+        focal_length_um=100.0,
+    )
+    assert result.in_validated_region is False
+    assert result.distance_from_bounds is not None
+    assert "paraxial" in result.diagnostic
+
+
+def test_thin_lens_slow_aperture_is_valid():
+    plane = get_tool("create_plane_wave").fn(n_x=256, dx=1.0, wavelength_um=0.5)
+    result = get_tool("apply_thin_lens").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]},
+        dx=1.0,
+        wavelength_um=0.5,
+        focal_length_um=10000.0,
+    )
+    assert result.in_validated_region is True
+    assert result.diagnostic is None
+
+
+def test_grating_under_sampled_period_is_flagged():
+    plane = get_tool("create_plane_wave").fn(n_x=256, dx=1.0, wavelength_um=0.5)
+    result = get_tool("apply_grating").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]}, dx=1.0, period_um=2.0
+    )
+    assert result.in_validated_region is False
+    assert "under-resolved" in result.diagnostic
+
+
+def test_grating_well_sampled_period_is_valid():
+    plane = get_tool("create_plane_wave").fn(n_x=256, dx=1.0, wavelength_um=0.5)
+    result = get_tool("apply_grating").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]}, dx=1.0, period_um=20.0
+    )
+    assert result.in_validated_region is True
+    assert result.diagnostic is None

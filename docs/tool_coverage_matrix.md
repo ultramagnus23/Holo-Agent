@@ -347,11 +347,9 @@ A second domain plugin, `holoagent/domains/waveoptics/` — independent
 scalar wave optics, master-build §12's explicit instruction that
 HoloForge must not become a general optics engine. Deliberately narrow
 (master-build §38: depth over feature count; §37: do not build
-everything at once) — only Stage 1 (fields) and enough of Stages 2-3
-(propagation, apertures) to produce one real, independently-verified
-diffraction pattern and one real, independently-verified beam-divergence
-law, per §28's requirement that every new module has at least one
-analytic reference case.
+everything at once) — Stage 1 (fields), Stage 2 (propagation), and most
+of Stage 3 (apertures, thin lens, grating), each with a real,
+independently-verified analytic reference case per §28.
 
 | Tool | computed | exposed | typed | tested | documented | validity-bounded |
 |---|---|---|---|---|---|---|
@@ -362,8 +360,10 @@ analytic reference case.
 | `apply_aperture` | ✓ (1D rect/slit only) | ✓ | ✓ | ✓ | ✓ | ✓ (aperture vs. grid extent) |
 | `propagate_angular_spectrum` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (spectral-content-aware, see below) |
 | `propagate_fraunhofer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (real Fraunhofer-distance check) |
+| `apply_thin_lens` | ✓ (paraxial, ideal) | ✓ | ✓ | ✓ | ✓ | ✓ (half-aperture/f paraxial-angle check) |
+| `apply_grating` | ✓ (sinusoidal amplitude only) | ✓ | ✓ | ✓ | ✓ | ✓ (grating-period sampling check) |
 
-**Two analytic validations, both run through the actual registered tools
+**Four analytic validations, all run through the actual registered tools
 (not the underlying physics functions in isolation)** —
 `tests/test_waveoptics_propagation.py`:
 
@@ -377,6 +377,23 @@ analytic reference case.
    divergence law to <0.1% relative error, at a gentle divergence angle
    (w0=20µm, wavelength=0.5µm) where the paraxial approximation itself is
    expected to hold well.
+3. A plane wave through a slit aperture and then `apply_thin_lens`,
+   propagated exactly to z=f via `propagate_angular_spectrum`, reproduces
+   the classic Fourier-transforming-lens identity (Goodman, *Fourier
+   Optics* ch. 5): the focal-plane field's first null lands at
+   `wavelength*f/width` (the same formula as the aperture's own Fraunhofer
+   first null) to <1% relative error, with >85% of the focal-plane power
+   in that central lobe (theoretical sinc² value ≈90.3%). This is the
+   textbook prediction, not an invented check — it's what distinguishes
+   a real Fourier-transforming lens from a tool that merely "applies some
+   phase."
+4. A plane wave through `apply_grating` (sinusoidal amplitude,
+   `t(x)=0.5*(1+cos(2πx/period))`), propagated to the far field, produces
+   exactly 3 diffraction orders (0, ±1) at the analytic angles
+   `sin(θ_m)=m·wavelength/period`, matched to within 5 grid-resolution
+   units, holding >99% of the far-field power — confirming both the
+   positions and the (sinusoidal-grating-specific) absence of higher
+   orders.
 
 **A real bug caught by the second validation, not assumed away:** the
 first Nyquist-sampling check written for `propagate_angular_spectrum`
@@ -404,9 +421,10 @@ aperture (this domain is 1D transverse fields only, matching the
 holoforge domain's own convention — a 1D slit of some half-width does
 NOT reproduce the Airy pattern master-build §28 names, which needs real
 2D radial symmetry; rather than build a mislabeled stand-in, that
-validation case is not attempted). No lenses, phase masks, gratings,
-imaging (PSF/OTF/MTF), coherence, or phase retrieval — Stages 3
-(remainder), 4, 5, and master-build Milestones 5-8 generally.
+validation case is not attempted). No general/arbitrary phase masks
+(only the two specific cases above: ideal thin lens, sinusoidal
+grating), no imaging (PSF/OTF/MTF), coherence, or phase retrieval —
+Stage 4, Stage 5, and master-build Milestones 5-8 generally.
 
 This domain is deliberately NOT auto-loaded by `holoagent.tools`'s
 backward-compatible default (see that module's docstring) — it's a

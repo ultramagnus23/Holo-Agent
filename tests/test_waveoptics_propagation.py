@@ -100,3 +100,92 @@ def test_gaussian_beam_angular_spectrum_matches_paraxial_w_of_z():
         w_analytic = w0_um * np.sqrt(1 + (z_um / zR_um) ** 2)
         rel_err = abs(w_numeric - w_analytic) / w_analytic
         assert rel_err < 0.001, f"z={z_um}: w_numeric={w_numeric} w_analytic={w_analytic} rel_err={rel_err}"
+
+
+def test_thin_lens_focal_plane_matches_fourier_transforming_lens_identity():
+    # Classic result (Goodman, Fourier Optics ch. 5): a plane wave through an
+    # aperture then an ideal thin lens, propagated exactly to z=f, reproduces
+    # the aperture's own far-field diffraction pattern -- specifically, its
+    # first-null position wavelength*f/width. This IS the analytic prediction;
+    # it isn't assumed, it's the textbook paraxial-lens Fourier property,
+    # checked here against the tool's own exact (non-paraxial) propagation.
+    wavelength_um = 0.5
+    width_um = 40.0
+    f_um = 5000.0
+    n_x, dx = 8192, 0.25
+
+    plane = get_tool("create_plane_wave").fn(n_x=n_x, dx=dx, wavelength_um=wavelength_um)
+    slit = get_tool("apply_aperture").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]}, dx=dx, width_um=width_um
+    )
+    lensed = get_tool("apply_thin_lens").fn(
+        field={"real": slit.value["real"], "imag": slit.value["imag"]},
+        dx=dx,
+        wavelength_um=wavelength_um,
+        focal_length_um=f_um,
+    )
+    assert lensed.in_validated_region is True, lensed.diagnostic
+
+    focus = get_tool("propagate_angular_spectrum").fn(
+        field={"real": lensed.value["real"], "imag": lensed.value["imag"]},
+        dx=dx,
+        wavelength_um=wavelength_um,
+        z_um=f_um,
+    )
+    intensity = np.array(get_tool("calculate_intensity").fn(field=focus.value["field"]).value["intensity"])
+    intensity /= intensity.max()
+
+    x = (np.arange(n_x) - n_x // 2) * dx
+    x_null_predicted = wavelength_um * f_um / width_um
+
+    mask = (x > 0.5 * x_null_predicted) & (x < 1.5 * x_null_predicted)
+    idx_in_window = np.where(mask)[0]
+    null_idx = idx_in_window[np.argmin(intensity[idx_in_window])]
+    rel_err = abs(x[null_idx] - x_null_predicted) / x_null_predicted
+    assert rel_err < 0.01, f"first-null at x={x[null_idx]}, predicted {x_null_predicted}, rel_err={rel_err}"
+
+    # Sanity cross-check: a sinc^2's first-null-to-first-null central lobe
+    # holds ~90.3% of the total power -- confirms this is genuinely the same
+    # functional form as the slit's own Fraunhofer pattern, not coincidence.
+    main_lobe_power = np.sum(intensity[np.abs(x) <= x_null_predicted * 1.1])
+    assert main_lobe_power / np.sum(intensity) > 0.85
+
+
+def test_grating_produces_three_orders_at_analytic_angles():
+    wavelength_um = 0.5
+    period_um = 20.0
+    n_x, dx = 8192, 0.5
+    z_um = 2.0e6
+
+    plane = get_tool("create_plane_wave").fn(n_x=n_x, dx=dx, wavelength_um=wavelength_um)
+    grated = get_tool("apply_grating").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]}, dx=dx, period_um=period_um
+    )
+    assert grated.in_validated_region is True, grated.diagnostic
+
+    far = get_tool("propagate_fraunhofer").fn(
+        field={"real": grated.value["real"], "imag": grated.value["imag"]},
+        dx=dx,
+        wavelength_um=wavelength_um,
+        z_um=z_um,
+    )
+    intensity = np.array(get_tool("calculate_intensity").fn(field=far.value["field"]).value["intensity"])
+    x_out = np.array(far.value["x_out_um"])
+
+    expected_x = {m: m * wavelength_um * z_um / period_um for m in (-1, 0, 1)}
+    x_out_spacing = wavelength_um * z_um / (n_x * dx)  # native resolution of the x_out grid
+    for m, xe in expected_x.items():
+        idx = np.argmin(np.abs(x_out - xe))
+        window = slice(max(0, idx - 20), idx + 20)
+        peak_idx = window.start + np.argmax(intensity[window])
+        assert abs(x_out[peak_idx] - xe) < 5 * x_out_spacing, (
+            f"order {m}: expected {xe}, found {x_out[peak_idx]}"
+        )
+
+    total_power = np.sum(intensity)
+    order_power = 0.0
+    for xe in expected_x.values():
+        idx = np.argmin(np.abs(x_out - xe))
+        window = slice(max(0, idx - 30), idx + 30)
+        order_power += np.sum(intensity[window])
+    assert order_power / total_power > 0.99, "a sinusoidal grating should put >99% of power in exactly 3 orders"
