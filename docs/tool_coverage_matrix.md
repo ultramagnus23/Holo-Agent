@@ -347,8 +347,9 @@ A second domain plugin, `holoagent/domains/waveoptics/` — independent
 scalar wave optics, master-build §12's explicit instruction that
 HoloForge must not become a general optics engine. Deliberately narrow
 (master-build §38: depth over feature count; §37: do not build
-everything at once) — Stage 1 (fields), Stage 2 (propagation), and most
-of Stage 3 (apertures, thin lens, grating), each with a real,
+everything at once) — Stage 1 (fields), Stage 2 (propagation), most of
+Stage 3 (apertures, thin lens, grating), and the core of Stage 4
+(idealized 4f-system spatial filtering), each with a real,
 independently-verified analytic reference case per §28.
 
 | Tool | computed | exposed | typed | tested | documented | validity-bounded |
@@ -362,10 +363,12 @@ independently-verified analytic reference case per §28.
 | `propagate_fraunhofer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (real Fraunhofer-distance check) |
 | `apply_thin_lens` | ✓ (paraxial, ideal) | ✓ | ✓ | ✓ | ✓ | ✓ (half-aperture/f paraxial-angle check) |
 | `apply_grating` | ✓ (sinusoidal amplitude only) | ✓ | ✓ | ✓ | ✓ | ✓ (grating-period sampling check) |
+| `apply_fourier_filter` | ✓ (hard-edged lowpass/highpass) | ✓ | ✓ | ✓ | ✓ | ✓ (cutoff vs. grid Nyquist frequency) |
 
-**Four analytic validations, all run through the actual registered tools
+**Five analytic validations, all run through the actual registered tools
 (not the underlying physics functions in isolation)** —
-`tests/test_waveoptics_propagation.py`:
+`tests/test_waveoptics_propagation.py` and
+`tests/test_waveoptics_imaging.py`:
 
 1. A plane wave through a slit aperture, propagated to the far field via
    `propagate_fraunhofer`, reproduces the exact analytic sinc² single-slit
@@ -394,6 +397,19 @@ independently-verified analytic reference case per §28.
    units, holding >99% of the far-field power — confirming both the
    positions and the (sinusoidal-grating-specific) absence of higher
    orders.
+5. `apply_fourier_filter` (Stage 4: the net field-level effect of an
+   idealized 4f imaging system with a hard-edged stop at its Fourier
+   plane — `image(x) = IFFT(mask(fx)·FFT(object(x)))`) reproduces the
+   *exact* closed-form Fourier pair `rect(fx/2fc) ↔ 2·fc·sinc(2·fc·x)`:
+   filtering a numerical impulse (delta function) through the lowpass
+   filter matches the filter's own analytic point-spread function to
+   <0.05% of its peak — this is the textbook diffraction-limited-
+   resolution result (Goodman ch. 6–7), not an approximation. Two further
+   exact-identity checks: a lowpass + highpass filter at the same cutoff
+   sum back to the original field to numerical precision (complementary
+   masks partition all spatial frequencies with no gap/overlap), and a
+   generous lowpass cutoff leaves a Gaussian beam whose real spectral
+   content sits far below that cutoff numerically unchanged.
 
 **A real bug caught by the second validation, not assumed away:** the
 first Nyquist-sampling check written for `propagate_angular_spectrum`
@@ -422,9 +438,14 @@ holoforge domain's own convention — a 1D slit of some half-width does
 NOT reproduce the Airy pattern master-build §28 names, which needs real
 2D radial symmetry; rather than build a mislabeled stand-in, that
 validation case is not attempted). No general/arbitrary phase masks
-(only the two specific cases above: ideal thin lens, sinusoidal
-grating), no imaging (PSF/OTF/MTF), coherence, or phase retrieval —
-Stage 4, Stage 5, and master-build Milestones 5-8 generally.
+(only the specific cases above: ideal thin lens, sinusoidal grating).
+`apply_fourier_filter` covers only a hard-edged rect passband/stopband —
+no soft/apodized filters, no formal PSF/OTF/MTF tool that reports a
+system's resolving power as a first-class quantity (the sinc impulse
+response is currently validated only inside a test, not exposed as its
+own tool output), no 2D imaging, coherence, or phase retrieval — the
+remainder of Stage 4, all of Stage 5, and master-build Milestones 5-8
+generally.
 
 This domain is deliberately NOT auto-loaded by `holoagent.tools`'s
 backward-compatible default (see that module's docstring) — it's a

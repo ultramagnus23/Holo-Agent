@@ -11,8 +11,8 @@ tool -- see docs/tool_coverage_matrix.md's Milestone 4 section for
 exactly what that covers today and what it explicitly does not (no true
 2D circular aperture / Airy-pattern case yet -- this domain is 1D
 transverse fields only, matching the holoforge domain's own convention;
-no general/arbitrary phase masks, imaging, coherence, or phase retrieval
-yet).
+no general/arbitrary phase masks, true imaging/PSF-OTF-MTF machinery,
+coherence, or phase retrieval yet).
 
 Layout:
   fields.py         create_plane_wave / create_gaussian_beam physics
@@ -20,8 +20,10 @@ Layout:
                      propagate_fraunhofer (far-field) physics
   elements.py        apply_aperture (rect only) / apply_thin_lens /
                      apply_grating physics
+  imaging.py          apply_fourier_filter (idealized 4f-system
+                     lowpass/highpass spatial-frequency filter) physics
   serialization.py   JSON <-> complex-array field representation
-  tools/             T1-T9 (waveoptics numbering restarts at its own T1;
+  tools/             T1-T10 (waveoptics numbering restarts at its own T1;
                      these are NOT the same T-numbers as the holoforge
                      domain's T1-T12 -- tool identity is by registered
                      name, not number, across domains)
@@ -37,4 +39,5 @@ from holoagent.domains.waveoptics.tools import (  # noqa: F401  (registration si
     propagate_fraunhofer,
     apply_thin_lens,
     apply_grating,
+    apply_fourier_filter,
 )

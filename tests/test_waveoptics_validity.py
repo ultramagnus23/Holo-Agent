@@ -113,3 +113,39 @@ def test_grating_well_sampled_period_is_valid():
     )
     assert result.in_validated_region is True
     assert result.diagnostic is None
+
+
+def test_fourier_filter_cutoff_beyond_nyquist_is_flagged_no_op():
+    plane = get_tool("create_plane_wave").fn(n_x=256, dx=1.0, wavelength_um=0.5)
+    nyquist = 1.0 / (2.0 * 1.0)
+    result = get_tool("apply_fourier_filter").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]},
+        dx=1.0,
+        cutoff_um_inv=nyquist * 2,
+        filter_type="lowpass",
+    )
+    assert result.in_validated_region is False
+    assert "no effect" in result.diagnostic
+
+
+def test_fourier_filter_cutoff_within_nyquist_is_valid():
+    plane = get_tool("create_plane_wave").fn(n_x=256, dx=1.0, wavelength_um=0.5)
+    result = get_tool("apply_fourier_filter").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]},
+        dx=1.0,
+        cutoff_um_inv=0.1,
+        filter_type="lowpass",
+    )
+    assert result.in_validated_region is True
+    assert result.diagnostic is None
+
+
+def test_fourier_filter_invalid_filter_type_raises_tool_error():
+    plane = get_tool("create_plane_wave").fn(n_x=64, dx=1.0, wavelength_um=0.5)
+    with pytest.raises(ToolError):
+        get_tool("apply_fourier_filter").fn(
+            field={"real": plane.value["real"], "imag": plane.value["imag"]},
+            dx=1.0,
+            cutoff_um_inv=0.1,
+            filter_type="bandpass",
+        )
