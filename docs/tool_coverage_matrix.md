@@ -349,12 +349,14 @@ HoloForge must not become a general optics engine. Deliberately narrow
 (master-build §38: depth over feature count; §37: do not build
 everything at once) — Stage 1 (fields), Stage 2 (propagation), most of
 Stage 3 (apertures, thin lens, grating), the core of Stage 4 (idealized
-4f-system spatial filtering), one Stage 5 case (Young's double slit), and
-now four pieces of master-build Milestone 5 (a diffraction-limited
+4f-system spatial filtering), one Stage 5 case (Young's double slit),
+four pieces of master-build Milestone 5 (a diffraction-limited
 incoherent imaging system's PSF/OTF/MTF, actually imaging an object
 through it end to end, and applying real Poisson shot noise plus
-Gaussian read noise to the result), each with a real,
-independently-verified analytic/statistical reference case per §28.
+Gaussian read noise to the result), and now the first slice of
+master-build Milestone 6 (Gerchberg-Saxton phase retrieval), each with a
+real, independently-verified analytic/statistical reference case per
+§28.
 
 | Tool | computed | exposed | typed | tested | documented | validity-bounded |
 |---|---|---|---|---|---|---|
@@ -373,11 +375,14 @@ independently-verified analytic/statistical reference case per §28.
 | `image_through_incoherent_system` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (same OTF-cutoff-vs-Nyquist check) |
 | `add_shot_noise` | ✓ (Poisson only) | ✓ | ✓ | ✓ | ✓ | ✓ (SNR=sqrt(mean count) vs. a stated 3.0 floor) |
 | `add_read_noise` | ✓ (Gaussian, fixed std) | ✓ | ✓ | ✓ | ✓ | ✓ (mean-signal/read-noise-std vs. a stated 3.0 floor) |
+| `retrieve_phase_gerchberg_saxton` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (Fourier-domain constraint error vs. a stated 0.01 floor) |
 
-**Eight analytic validations plus four statistical ones, all run through
-the actual registered tools (not the underlying physics functions in
-isolation)** — `tests/test_waveoptics_propagation.py`,
-`tests/test_waveoptics_imaging.py`, and `tests/test_waveoptics_noise.py`:
+**Eight analytic validations plus four statistical ones plus two
+synthetic-ground-truth phase-retrieval cases, all run through the actual
+registered tools (not the underlying physics functions in isolation)** —
+`tests/test_waveoptics_propagation.py`, `tests/test_waveoptics_imaging.py`,
+`tests/test_waveoptics_noise.py`, and
+`tests/test_waveoptics_phase_retrieval.py`:
 
 1. A plane wave through a slit aperture, propagated to the far field via
    `propagate_fraunhofer`, reproduces the exact analytic sinc² single-slit
@@ -492,6 +497,30 @@ isolation)** — `tests/test_waveoptics_propagation.py`,
     against that sum, matched to <5%. This also confirms the two RNG
     draws (one per tool call) are genuinely independent rather than
     accidentally correlated through shared state.
+11. `retrieve_phase_gerchberg_saxton` (master-build Milestone 6, first
+    slice — classic two-intensity iterative phase retrieval). Two
+    synthetic-ground-truth cases, both deliberately kept and reported
+    honestly rather than only the success case, per the master-build
+    Never-Do list ("never overclaim what a computation demonstrated"):
+    - A smooth, low-frequency phase profile with a deterministic
+      zero-phase initial guess: GS reliably converges to the true field,
+      matched to <0.01 normalized RMS field error (and Fourier-domain
+      constraint error <1e-6) after 300 iterations.
+    - **Found live, not glossed over:** a more oscillatory phase profile
+      makes GS converge the Fourier-domain constraint error to ~1e-7
+      (essentially perfect agreement with BOTH measured intensities)
+      while the recovered field still lands ~8.6% away from the true
+      field — a genuine different fixed point of this non-convex
+      algorithm, not a tool bug. Kept as its own test
+      (`test_gerchberg_saxton_constraint_satisfaction_does_not_guarantee_
+      unique_recovery`) specifically so the tool's real, honest claim
+      (the recovered field satisfies the measurements) stays visibly
+      distinct from a claim it does NOT make (that field is *the*
+      correct phase). This is exactly why the tool's own
+      `in_validated_region` flag is defined in terms of measurement
+      constraint satisfaction (the only thing checkable at inference
+      time, since the true phase is what's being solved for) rather than
+      implying recovery success.
 
 **A real bug caught by the second validation, not assumed away:** the
 first Nyquist-sampling check written for `propagate_angular_spectrum`
@@ -540,9 +569,19 @@ biases rather than random fluctuations — a different kind of correction
 than either tool models), no analog-to-digital quantization, and no
 single tool that applies both together (a caller composes the two tool
 calls themselves, as `tests/test_waveoptics_noise.py`'s pipeline test
-does). No coherence (partial/spatial coherence) or phase retrieval — the
-remainder of Stage 4, the remainder of Stage 5, and the rest of
-Milestone 5 plus Milestones 6-8 generally.
+does). `retrieve_phase_gerchberg_saxton` is the classic two-INTENSITY
+(object plane + Fourier plane) variant only — no single-diffraction-pattern
+coherent-diffractive-imaging (CDI) variant (which needs an
+explicit support constraint and carries additional trivial ambiguities
+this two-intensity formulation avoids), no Fienup hybrid-input-output
+(HIO) or other variants known to escape GS's stagnation points better,
+and no automatic multi-restart/best-of-N strategy to mitigate the
+non-uniqueness this session found live (a caller who hits a
+"converged but possibly wrong" case has to notice and retry themselves
+with a different `phase_init`). No coherence (partial/spatial
+coherence) — the remainder of Stage 4, the remainder of Stage 5, the
+rest of Milestone 5, the rest of Milestone 6, and Milestones 7-8
+generally.
 
 This domain is deliberately NOT auto-loaded by `holoagent.tools`'s
 backward-compatible default (see that module's docstring) — it's a

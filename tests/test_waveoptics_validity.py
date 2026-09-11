@@ -4,6 +4,8 @@ validity information"). Each test forces a genuine violation and checks
 the tool actually flags it, with a real distance_from_bounds.
 """
 
+import numpy as np
+
 import holoagent.domains.waveoptics  # noqa: F401
 from holoagent.tools.contract import ToolError
 from holoagent.tools.registry import get_tool
@@ -258,3 +260,39 @@ def test_read_noise_zero_std_is_trivially_valid():
 def test_read_noise_negative_std_raises_tool_error():
     with pytest.raises(ToolError):
         get_tool("add_read_noise").fn(image_intensity=[1.0, 1.0], read_noise_std=-1.0)
+
+
+def test_gerchberg_saxton_insufficient_iterations_is_flagged_unconverged():
+    n_x, dx = 512, 0.2
+    x = (np.arange(n_x) - n_x // 2) * dx
+    amp = np.exp(-(x**2) / (2 * 20.0**2))
+    g_true = amp * np.exp(1j * (0.4 * np.sin(2 * np.pi * x / 15.0)))
+    object_intensity = (amp**2).tolist()
+    fourier_intensity = (np.abs(np.fft.fft(g_true)) ** 2).tolist()
+
+    result = get_tool("retrieve_phase_gerchberg_saxton").fn(
+        object_intensity=object_intensity, fourier_intensity=fourier_intensity, n_iterations=1
+    )
+    assert result.in_validated_region is False
+    assert "constraint error" in result.diagnostic
+
+
+def test_gerchberg_saxton_length_mismatch_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("retrieve_phase_gerchberg_saxton").fn(
+            object_intensity=[1.0, 1.0, 1.0], fourier_intensity=[1.0, 1.0], n_iterations=10
+        )
+
+
+def test_gerchberg_saxton_negative_intensity_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("retrieve_phase_gerchberg_saxton").fn(
+            object_intensity=[-1.0, 1.0], fourier_intensity=[1.0, 1.0], n_iterations=10
+        )
+
+
+def test_gerchberg_saxton_zero_iterations_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("retrieve_phase_gerchberg_saxton").fn(
+            object_intensity=[1.0, 1.0], fourier_intensity=[1.0, 1.0], n_iterations=0
+        )

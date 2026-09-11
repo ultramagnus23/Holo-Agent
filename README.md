@@ -198,16 +198,33 @@ progress. Done so far:
   checked by composing both noise tools, matched to <5%). See
   `docs/tool_coverage_matrix.md` for exactly what's not built yet (2D
   circular pupil / Airy-disk Rayleigh criterion, soft pupils, dark
-  current, ADC quantization, coherence, phase retrieval).
+  current, ADC quantization, coherence).
+- **Milestone 6, started** — `retrieve_phase_gerchberg_saxton`, the
+  classic two-intensity iterative phase-retrieval algorithm, in the same
+  `waveoptics` domain. Validated against synthetic ground truth two
+  ways, both kept and reported honestly rather than showing only the
+  success case: a smooth phase profile with a deterministic zero-phase
+  initial guess reliably converges to the true field (<0.01 normalized
+  RMS error); a more oscillatory phase profile was **found live** to
+  converge the measurement-constraint error to near-zero while landing
+  ~8.6% from the true field — a genuine different fixed point of this
+  non-convex algorithm, not a bug. The tool's own validity flag is
+  scoped honestly to match: it reports constraint satisfaction (the only
+  thing checkable at inference time, since the true phase is what's
+  being solved for), and never claims unique phase recovery. See
+  `docs/tool_coverage_matrix.md` for what's not built (single-pattern
+  CDI, Fienup HIO, multi-restart strategies to mitigate the
+  non-uniqueness found above).
 
-`holoagent.domains.waveoptics` (15 tools total across Milestones 4-5, 8
-analytic + 4 statistical validations) is deliberately not auto-loaded
-into the default HoloForge-focused orchestrator session — using it means
-an explicit `import holoagent.domains.waveoptics`.
+`holoagent.domains.waveoptics` (16 tools total across Milestones 4-6, 9
+analytic + 4 statistical validations, of which 2 are the phase-retrieval
+ground-truth cases) is deliberately not auto-loaded into the default
+HoloForge-focused orchestrator session — using it means an explicit
+`import holoagent.domains.waveoptics`.
 
-The rest of Milestone 5, and Milestones 6-8 (phase retrieval/holography
-as a general capability, coherence, research knowledge, a full research
-agent) are not started — still a multi-month undertaking, not something
+The rest of Milestones 5 and 6, and Milestones 7-8 (coherence, research
+knowledge, a full research agent) are not started — still a multi-month
+undertaking, not something
 a handful of sessions closes out. Treat the "Status" section above as
 the accurate current HoloForge-domain state; this note is what's true
 for the master-build document's own broader vision specifically.
