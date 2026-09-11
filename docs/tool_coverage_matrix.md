@@ -349,8 +349,10 @@ HoloForge must not become a general optics engine. Deliberately narrow
 (master-build §38: depth over feature count; §37: do not build
 everything at once) — Stage 1 (fields), Stage 2 (propagation), most of
 Stage 3 (apertures, thin lens, grating), the core of Stage 4 (idealized
-4f-system spatial filtering), and one Stage 5 case (Young's double slit),
-each with a real, independently-verified analytic reference case per §28.
+4f-system spatial filtering), one Stage 5 case (Young's double slit), and
+now the first slice of master-build Milestone 5 (a diffraction-limited
+incoherent imaging system's PSF/OTF/MTF), each with a real,
+independently-verified analytic reference case per §28.
 
 | Tool | computed | exposed | typed | tested | documented | validity-bounded |
 |---|---|---|---|---|---|---|
@@ -365,8 +367,9 @@ each with a real, independently-verified analytic reference case per §28.
 | `apply_grating` | ✓ (sinusoidal amplitude only) | ✓ | ✓ | ✓ | ✓ | ✓ (grating-period sampling check) |
 | `apply_fourier_filter` | ✓ (hard-edged lowpass/highpass) | ✓ | ✓ | ✓ | ✓ | ✓ (cutoff vs. grid Nyquist frequency) |
 | `apply_double_slit` | ✓ (2 identical hard-edged slits) | ✓ | ✓ | ✓ | ✓ | ✓ (total extent vs. grid extent) |
+| `compute_incoherent_psf_otf` | ✓ (1D rect pupil only) | ✓ | ✓ | ✓ | ✓ | ✓ (OTF cutoff vs. grid Nyquist frequency) |
 
-**Six analytic validations, all run through the actual registered tools
+**Seven analytic validations, all run through the actual registered tools
 (not the underlying physics functions in isolation)** —
 `tests/test_waveoptics_propagation.py` and
 `tests/test_waveoptics_imaging.py`:
@@ -425,6 +428,23 @@ each with a real, independently-verified analytic reference case per §28.
    contaminating the comparison), not a tool bug; confirmed by rerunning
    at several sampling densities and watching the error shrink
    monotonically (0.076 → 0.016 → 0.003 as dx went 0.5 → 0.1 → 0.02µm).
+7. `compute_incoherent_psf_otf` (master-build Milestone 5, first slice —
+   the first tool from beyond Milestone 4's own scope): the OTF of a
+   diffraction-limited **incoherent** imaging system with a hard-edged 1D
+   rect pupil of coherent cutoff `fc` is *not* the pupil function itself
+   (that's the coherent amplitude transfer function, already covered by
+   `apply_fourier_filter`) — it's the pupil's own normalized
+   autocorrelation, which for a rect pupil has the exact closed form of a
+   triangle function with cutoff `2·fc` (Goodman, *Fourier Optics* ch. 6).
+   Computed here via the FFT autocorrelation theorem (OTF = normalized FFT
+   of the incoherent PSF, itself `|IFFT(pupil)|²`) and matched to the
+   analytic triangle function to <0.001 absolute error — an exact
+   closed-form identity, not an approximation. This is also the first
+   tool in the domain whose real physical content is a genuine,
+   checkable *distinction* rather than a single number: incoherent
+   imaging resolves finer detail (up to `2·fc`) than coherent imaging
+   through the identical pupil (up to `fc`) — asserted nowhere, checked
+   directly in `tests/test_waveoptics_imaging.py`.
 
 **A real bug caught by the second validation, not assumed away:** the
 first Nyquist-sampling check written for `propagate_angular_spectrum`
@@ -462,9 +482,16 @@ own tool output). `apply_double_slit` is exactly 2 slits of fixed
 identical width — no general N-slit array (the N-slit array-factor
 formula was prototyped and found to need much finer grid resolution than
 the N=2 case to match cleanly at its narrower, higher-order interference
-peaks; not pursued further this session). No 2D imaging, coherence, or
-phase retrieval — the remainder of Stage 4, the remainder of Stage 5, and
-master-build Milestones 5-8 generally.
+peaks; not pursued further this session). `compute_incoherent_psf_otf` is
+1D and a hard-edged rect pupil only — no 2D circular pupil (so no formal
+Airy-disk-based Rayleigh criterion, consistent with this domain's
+1D-only convention throughout), no soft/apodized pupils, no way yet to
+actually run an object field THROUGH this incoherent system end to end
+(the tool characterizes the system's PSF/OTF/MTF, but doesn't yet
+convolve an arbitrary intensity object with the PSF to produce a
+simulated image). No coherence (partial/spatial coherence) or phase
+retrieval — the remainder of Stage 4, the remainder of Stage 5, and the
+rest of Milestone 5 plus Milestones 6-8 generally.
 
 This domain is deliberately NOT auto-loaded by `holoagent.tools`'s
 backward-compatible default (see that module's docstring) — it's a

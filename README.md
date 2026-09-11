@@ -165,28 +165,40 @@ progress. Done so far:
   separation; core no longer knows HoloForge exists.
 - **Milestone 4, started** — a second domain,
   `holoagent/domains/waveoptics/` (general scalar wave optics,
-  independent of HoloForge per §12's explicit instruction). 11 tools
-  (fields, propagation, aperture, thin lens, grating, Fourier-plane
-  filter, double slit), 6 real analytic validations (Fraunhofer sinc²
-  diffraction, Gaussian-beam w(z) divergence via the exact
-  angular-spectrum method, the Fourier-transforming-lens identity,
-  sinusoidal-grating diffraction orders, the exact rect↔sinc Fourier pair
-  for an idealized 4f imaging system's spatial filter, and Young's
-  double-slit interference pattern) — see `docs/tool_coverage_matrix.md`'s
-  Milestone 4 section for exactly what's covered and what's explicitly
-  not (no 2D circular aperture/Airy pattern, no general/arbitrary phase
-  masks, no soft/apodized filters or a first-class PSF/OTF/MTF tool, no
-  general N-slit array, no 2D imaging/coherence/phase-retrieval yet).
-  Deliberately not auto-loaded into the default HoloForge-focused
-  orchestrator session — using it means an explicit
-  `import holoagent.domains.waveoptics`.
+  independent of HoloForge per §12's explicit instruction). Fields,
+  propagation, aperture, thin lens, grating, Fourier-plane filter, double
+  slit — 6 real analytic validations (Fraunhofer sinc² diffraction,
+  Gaussian-beam w(z) divergence via the exact angular-spectrum method,
+  the Fourier-transforming-lens identity, sinusoidal-grating diffraction
+  orders, the exact rect↔sinc Fourier pair for an idealized 4f imaging
+  system's spatial filter, and Young's double-slit interference pattern)
+  — see `docs/tool_coverage_matrix.md`'s Milestone 4 section for exactly
+  what's covered and what's explicitly not (no 2D circular aperture/Airy
+  pattern, no general/arbitrary phase masks, no soft/apodized filters, no
+  general N-slit array).
+- **Milestone 5, started** — first slice: `compute_incoherent_psf_otf`,
+  the PSF/OTF/MTF of a diffraction-limited **incoherent** imaging system
+  with a hard-edged 1D rect pupil, in the same `waveoptics` domain. Its
+  own real analytic validation: the OTF is the pupil's normalized
+  autocorrelation (NOT the pupil function itself, which is only the
+  coherent case) — an exact closed-form triangle function with cutoff
+  2x the coherent pupil's, matched to <0.001 absolute error. See
+  `docs/tool_coverage_matrix.md` for exactly what's not built yet (2D
+  circular pupil / Airy-disk Rayleigh criterion, soft pupils, actually
+  convolving an object field through the system to produce a simulated
+  image, coherence, phase retrieval).
 
-Milestones 5-8 (imaging, phase retrieval/holography as a general
-capability, research knowledge, a full research agent) are not started —
-still a multi-month undertaking, not something a handful of sessions
-closes out. Treat the "Status" section above as the accurate current
-HoloForge-domain state; this note is what's true for the master-build
-document's own broader vision specifically.
+`holoagent.domains.waveoptics` (12 tools total across Milestones 4-5, 7
+real analytic validations) is deliberately not auto-loaded into the
+default HoloForge-focused orchestrator session — using it means an
+explicit `import holoagent.domains.waveoptics`.
+
+The rest of Milestone 5, and Milestones 6-8 (phase retrieval/holography
+as a general capability, coherence, research knowledge, a full research
+agent) are not started — still a multi-month undertaking, not something
+a handful of sessions closes out. Treat the "Status" section above as
+the accurate current HoloForge-domain state; this note is what's true
+for the master-build document's own broader vision specifically.
 
 ## Layout
 

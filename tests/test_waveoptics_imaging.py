@@ -78,3 +78,47 @@ def test_lowpass_leaves_a_broadband_gaussian_beam_unchanged_when_cutoff_is_gener
     )
     diff = np.max(np.abs(np.array(result.value["real"]) - np.array(beam.value["real"])))
     assert diff < 1e-6
+
+
+def test_incoherent_otf_matches_analytic_triangle_function():
+    # Master-build Milestone 5, first slice: the OTF of a diffraction-
+    # limited INCOHERENT imaging system with a hard-edged rect pupil is
+    # NOT the pupil function itself (that's the coherent amplitude
+    # transfer function, already validated above) -- it's the pupil's own
+    # normalized autocorrelation, which for a rect pupil of half-width fc
+    # has the exact closed form of a triangle function with cutoff 2*fc
+    # (Goodman, Fourier Optics ch. 6): OTF(fx) = max(0, 1 - |fx|/(2*fc)).
+    n_x, dx = 4096, 0.05
+    fc = 2.0
+
+    result = get_tool("compute_incoherent_psf_otf").fn(n_x=n_x, dx=dx, cutoff_um_inv=fc)
+    assert result.in_validated_region is True, result.diagnostic
+    assert result.value["otf_cutoff_um_inv"] == 2.0 * fc
+
+    fx = np.array(result.value["fx_um_inv"])
+    otf = np.array(result.value["otf"])
+    analytic = np.maximum(0, 1 - np.abs(fx) / (2 * fc))
+    max_abs_err = np.max(np.abs(otf - analytic))
+    assert max_abs_err < 0.001, f"max abs error vs analytic triangle OTF: {max_abs_err}"
+
+    # MTF of a real, non-negative OTF is just the OTF itself
+    mtf = np.array(result.value["mtf"])
+    assert np.allclose(mtf, np.abs(otf))
+
+    # PSF is peaked and centered at x=0 (a real, physical point-spread
+    # function, not an arbitrary array)
+    x = np.array(result.value["x_um"])
+    psf = np.array(result.value["psf_intensity"])
+    assert x[np.argmax(psf)] == 0.0
+    assert psf.max() == 1.0
+
+
+def test_incoherent_imaging_resolves_finer_detail_than_coherent_of_same_pupil():
+    # The OTF cutoff (2*fc) exceeding the coherent ATF cutoff (fc) is the
+    # real physical claim being made here -- incoherent imaging genuinely
+    # resolves finer spatial detail than coherent imaging through the same
+    # pupil. Checked directly, not just asserted in a docstring.
+    fc = 3.0
+    result = get_tool("compute_incoherent_psf_otf").fn(n_x=2048, dx=0.05, cutoff_um_inv=fc)
+    assert result.value["otf_cutoff_um_inv"] > result.value["coherent_cutoff_um_inv"]
+    assert result.value["otf_cutoff_um_inv"] == 2.0 * result.value["coherent_cutoff_um_inv"]

@@ -173,3 +173,22 @@ def test_double_slit_within_grid_extent_is_valid():
     )
     assert result.in_validated_region is True
     assert result.diagnostic is None
+
+
+def test_incoherent_otf_cutoff_beyond_grid_nyquist_is_flagged():
+    # OTF cutoff is 2x the coherent cutoff -- pick a coherent cutoff whose
+    # DOUBLE exceeds the grid's Nyquist frequency, even though the
+    # coherent cutoff alone would not.
+    dx = 1.0
+    nyquist = 1.0 / (2.0 * dx)
+    result = get_tool("compute_incoherent_psf_otf").fn(n_x=256, dx=dx, cutoff_um_inv=nyquist * 0.6)
+    assert result.in_validated_region is False
+    assert "OTF's own support" in result.diagnostic
+
+
+def test_incoherent_otf_cutoff_within_grid_nyquist_is_valid():
+    dx = 1.0
+    nyquist = 1.0 / (2.0 * dx)
+    result = get_tool("compute_incoherent_psf_otf").fn(n_x=256, dx=dx, cutoff_um_inv=nyquist * 0.2)
+    assert result.in_validated_region is True
+    assert result.diagnostic is None
