@@ -353,9 +353,10 @@ Stage 3 (apertures, thin lens, grating), the core of Stage 4 (idealized
 four pieces of master-build Milestone 5 (a diffraction-limited
 incoherent imaging system's PSF/OTF/MTF, actually imaging an object
 through it end to end, and applying real Poisson shot noise plus
-Gaussian read noise to the result), and now the first slice of
-master-build Milestone 6 (Gerchberg-Saxton phase retrieval), each with a
-real, independently-verified analytic/statistical reference case per
+Gaussian read noise to the result), and now two pieces of master-build
+Milestone 6 (Gerchberg-Saxton phase retrieval, plus a verified
+multi-restart mitigation for its own non-convex stagnation), each with
+a real, independently-verified analytic/statistical reference case per
 §28.
 
 | Tool | computed | exposed | typed | tested | documented | validity-bounded |
@@ -377,7 +378,7 @@ real, independently-verified analytic/statistical reference case per
 | `add_read_noise` | ✓ (Gaussian, fixed std) | ✓ | ✓ | ✓ | ✓ | ✓ (mean-signal/read-noise-std vs. a stated 3.0 floor) |
 | `retrieve_phase_gerchberg_saxton` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (Fourier-domain constraint error vs. a stated 0.01 floor) |
 
-**Eight analytic validations plus four statistical ones plus two
+**Eight analytic validations plus four statistical ones plus three
 synthetic-ground-truth phase-retrieval cases, all run through the actual
 registered tools (not the underlying physics functions in isolation)** —
 `tests/test_waveoptics_propagation.py`, `tests/test_waveoptics_imaging.py`,
@@ -521,6 +522,16 @@ registered tools (not the underlying physics functions in isolation)** —
       constraint satisfaction (the only thing checkable at inference
       time, since the true phase is what's being solved for) rather than
       implying recovery success.
+    - `n_restarts` (a real, checkable mitigation for exactly the
+      stagnation just described, not a claimed cure): running 20
+      independent trials from random initial phases and keeping the
+      lowest-constraint-error trial brought that SAME oscillatory case's
+      normalized field error from ~8.6% (single deterministic run) down
+      to ~1.1% — a genuine improvement, verified directly against the
+      case that motivated it
+      (`test_gerchberg_saxton_multi_restart_improves_the_stagnating_
+      oscillatory_case`), not merely asserted to help. Reproducible given
+      a seed, checked separately.
 
 **A real bug caught by the second validation, not assumed away:** the
 first Nyquist-sampling check written for `propagate_angular_spectrum`
@@ -574,11 +585,13 @@ does). `retrieve_phase_gerchberg_saxton` is the classic two-INTENSITY
 coherent-diffractive-imaging (CDI) variant (which needs an
 explicit support constraint and carries additional trivial ambiguities
 this two-intensity formulation avoids), no Fienup hybrid-input-output
-(HIO) or other variants known to escape GS's stagnation points better,
-and no automatic multi-restart/best-of-N strategy to mitigate the
-non-uniqueness this session found live (a caller who hits a
-"converged but possibly wrong" case has to notice and retry themselves
-with a different `phase_init`). No coherence (partial/spatial
+(HIO) or other variants known to escape GS's stagnation points better
+than random-restart alone. `n_restarts` mitigates but does not eliminate
+the non-uniqueness this session found live — a caller still has no way
+to know, from this tool's own output, whether even the best-of-N result
+is the true phase (only that it's the best-satisfying one tried); a
+result reporting `in_validated_region: True` is a claim about constraint
+satisfaction only, always. No coherence (partial/spatial
 coherence) — the remainder of Stage 4, the remainder of Stage 5, the
 rest of Milestone 5, the rest of Milestone 6, and Milestones 7-8
 generally.

@@ -296,3 +296,10 @@ def test_gerchberg_saxton_zero_iterations_raises_tool_error():
         get_tool("retrieve_phase_gerchberg_saxton").fn(
             object_intensity=[1.0, 1.0], fourier_intensity=[1.0, 1.0], n_iterations=0
         )
+
+
+def test_gerchberg_saxton_zero_restarts_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("retrieve_phase_gerchberg_saxton").fn(
+            object_intensity=[1.0, 1.0], fourier_intensity=[1.0, 1.0], n_iterations=10, n_restarts=0
+        )

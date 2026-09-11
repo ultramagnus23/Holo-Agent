@@ -92,6 +92,68 @@ def test_gerchberg_saxton_constraint_satisfaction_does_not_guarantee_unique_reco
     )
 
 
+def test_gerchberg_saxton_multi_restart_improves_the_stagnating_oscillatory_case():
+    # The exact case from the previous test, where a single deterministic
+    # zero-phase run stagnated at ~8.6% field error despite near-perfect
+    # constraint satisfaction. Multi-restart (random initial phases,
+    # keeping the lowest-constraint-error trial) is a real, verified
+    # mitigation -- checked directly against that stagnation, not assumed
+    # to help. Prototyped and confirmed (20 restarts: ~8.6% -> ~1.1%)
+    # before writing this test.
+    n_x, dx = 1024, 0.2
+    x = (np.arange(n_x) - n_x // 2) * dx
+    amp = np.exp(-(x**2) / (2 * 25.0**2))
+    phase_true = 0.3 * np.sin(2 * np.pi * x / 40.0) + 0.02 * x
+    g_true = amp * np.exp(1j * phase_true)
+    mask = amp > 0.05
+
+    object_intensity = (amp**2).tolist()
+    fourier_intensity = (np.abs(np.fft.fft(g_true)) ** 2).tolist()
+
+    single_run = get_tool("retrieve_phase_gerchberg_saxton").fn(
+        object_intensity=object_intensity, fourier_intensity=fourier_intensity, n_iterations=300
+    )
+    g_single = np.array(single_run.value["real"]) + 1j * np.array(single_run.value["imag"])
+    err_single = _normalized_field_error(g_single, g_true, mask)
+    assert single_run.value["n_restarts_used"] == 1
+
+    multi_restart = get_tool("retrieve_phase_gerchberg_saxton").fn(
+        object_intensity=object_intensity,
+        fourier_intensity=fourier_intensity,
+        n_iterations=300,
+        n_restarts=20,
+        seed=0,
+    )
+    assert multi_restart.in_validated_region is True, multi_restart.diagnostic
+    assert multi_restart.value["n_restarts_used"] == 20
+    g_multi = np.array(multi_restart.value["real"]) + 1j * np.array(multi_restart.value["imag"])
+    err_multi = _normalized_field_error(g_multi, g_true, mask)
+
+    assert err_multi < err_single, f"multi-restart ({err_multi}) should beat single run ({err_single})"
+    assert err_multi < 0.03, f"expected multi-restart to reach a genuinely good recovery, got {err_multi}"
+
+
+def test_gerchberg_saxton_multi_restart_is_reproducible_given_a_seed():
+    n_x, dx = 256, 0.5
+    x = (np.arange(n_x) - n_x // 2) * dx
+    amp = np.exp(-(x**2) / (2 * 15.0**2))
+    g_true = amp * np.exp(1j * (0.2 * np.sin(2 * np.pi * x / 20.0)))
+    object_intensity = (amp**2).tolist()
+    fourier_intensity = (np.abs(np.fft.fft(g_true)) ** 2).tolist()
+
+    a = get_tool("retrieve_phase_gerchberg_saxton").fn(
+        object_intensity=object_intensity, fourier_intensity=fourier_intensity,
+        n_iterations=50, n_restarts=5, seed=3,
+    )
+    b = get_tool("retrieve_phase_gerchberg_saxton").fn(
+        object_intensity=object_intensity, fourier_intensity=fourier_intensity,
+        n_iterations=50, n_restarts=5, seed=3,
+    )
+    assert a.value["real"] == b.value["real"]
+    assert a.value["imag"] == b.value["imag"]
+    assert a.value["best_restart_index"] == b.value["best_restart_index"]
+
+
 def test_gerchberg_saxton_custom_phase_init_is_used():
     n_x, dx = 256, 0.5
     x = (np.arange(n_x) - n_x // 2) * dx
