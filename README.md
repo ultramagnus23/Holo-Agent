@@ -176,7 +176,7 @@ progress. Done so far:
   what's covered and what's explicitly not (no 2D circular aperture/Airy
   pattern, no general/arbitrary phase masks, no soft/apodized filters, no
   general N-slit array).
-- **Milestone 5, started** — three tools in the same `waveoptics` domain:
+- **Milestone 5, started** — four tools in the same `waveoptics` domain:
   `compute_incoherent_psf_otf`, the PSF/OTF/MTF of a diffraction-limited
   **incoherent** imaging system with a hard-edged 1D rect pupil (real
   analytic validation: the OTF is the pupil's normalized autocorrelation,
@@ -187,17 +187,21 @@ progress. Done so far:
   system end to end (validated two ways: exact linearity/shift-invariance
   for two point sources, and the operational meaning of MTF — a
   sinusoidal object's contrast is reduced by exactly `MTF(f0)`, matched
-  to <1% against the same triangle-function OTF); and `add_shot_noise`,
-  real Poisson shot noise applied to a simulated image (validated
-  statistically on the tool's own random output: sample variance/mean
-  ratio matches the Poisson identity Var=mean to <5%, and relative noise
-  at two signal levels matches the 1/sqrt(photon_scale) scaling law to
-  <10%). See `docs/tool_coverage_matrix.md` for exactly what's not built
-  yet (2D circular pupil / Airy-disk Rayleigh criterion, soft pupils,
-  Gaussian read noise, coherence, phase retrieval).
+  to <1% against the same triangle-function OTF); `add_shot_noise`, real
+  Poisson shot noise applied to a simulated image (sample variance/mean
+  ratio matches the Poisson identity Var=mean to <5%, relative noise at
+  two signal levels matches the 1/sqrt(photon_scale) scaling law to
+  <10%); and `add_read_noise`, additive Gaussian sensor noise with a
+  fixed standard deviation independent of signal level (own statistics
+  match: mean ~0, std matches read_noise_std to <5%; plus the real
+  physical identity `Var[shot+read] = Var[shot] + read_noise_std²`,
+  checked by composing both noise tools, matched to <5%). See
+  `docs/tool_coverage_matrix.md` for exactly what's not built yet (2D
+  circular pupil / Airy-disk Rayleigh criterion, soft pupils, dark
+  current, ADC quantization, coherence, phase retrieval).
 
-`holoagent.domains.waveoptics` (14 tools total across Milestones 4-5, 8
-analytic + 2 statistical validations) is deliberately not auto-loaded
+`holoagent.domains.waveoptics` (15 tools total across Milestones 4-5, 8
+analytic + 4 statistical validations) is deliberately not auto-loaded
 into the default HoloForge-focused orchestrator session — using it means
 an explicit `import holoagent.domains.waveoptics`.
 

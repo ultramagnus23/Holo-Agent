@@ -234,3 +234,27 @@ def test_shot_noise_negative_intensity_raises_tool_error():
 def test_shot_noise_nonpositive_photon_scale_raises_tool_error():
     with pytest.raises(ToolError):
         get_tool("add_shot_noise").fn(image_intensity=[1.0, 1.0], photon_scale=0.0)
+
+
+def test_read_noise_low_signal_relative_to_noise_is_flagged():
+    result = get_tool("add_read_noise").fn(image_intensity=[1.0] * 100, read_noise_std=1.0, seed=0)
+    assert result.in_validated_region is False
+    assert "dominates" in result.diagnostic
+
+
+def test_read_noise_high_signal_relative_to_noise_is_valid():
+    result = get_tool("add_read_noise").fn(image_intensity=[100.0] * 100, read_noise_std=1.0, seed=0)
+    assert result.in_validated_region is True
+    assert result.diagnostic is None
+
+
+def test_read_noise_zero_std_is_trivially_valid():
+    result = get_tool("add_read_noise").fn(image_intensity=[1.0] * 10, read_noise_std=0.0, seed=0)
+    assert result.in_validated_region is True
+    assert result.value["read_snr"] is None
+    assert result.value["noisy_intensity"] == [1.0] * 10
+
+
+def test_read_noise_negative_std_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("add_read_noise").fn(image_intensity=[1.0, 1.0], read_noise_std=-1.0)

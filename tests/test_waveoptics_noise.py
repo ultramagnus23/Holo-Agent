@@ -54,6 +54,51 @@ def test_shot_noise_is_reproducible_given_a_seed():
     assert a.value["noisy_intensity"] == b.value["noisy_intensity"]
 
 
+def test_read_noise_has_zero_mean_and_matches_stated_std():
+    n = 20000
+    read_noise_std = 0.5
+
+    result = get_tool("add_read_noise").fn(
+        image_intensity=[10.0] * n, read_noise_std=read_noise_std, seed=0
+    )
+    assert result.in_validated_region is True, result.diagnostic
+
+    noise = np.array(result.value["noisy_intensity"]) - 10.0
+    assert abs(noise.mean()) < 0.02, f"read noise should average to ~0, got mean={noise.mean()}"
+    rel_err = abs(noise.std() - read_noise_std) / read_noise_std
+    assert rel_err < 0.05, f"read noise std should match read_noise_std, got {noise.std()}"
+
+
+def test_read_noise_is_reproducible_given_a_seed():
+    a = get_tool("add_read_noise").fn(image_intensity=[5.0] * 100, read_noise_std=1.0, seed=42)
+    b = get_tool("add_read_noise").fn(image_intensity=[5.0] * 100, read_noise_std=1.0, seed=42)
+    assert a.value["noisy_intensity"] == b.value["noisy_intensity"]
+
+
+def test_combined_shot_and_read_noise_variances_add():
+    # Independent noise sources' variances sum: Var[shot+read] =
+    # Var[shot] + read_noise_std^2. Checked directly on real tool output
+    # -- confirms the two noise processes are genuinely independent in
+    # this implementation (not, say, accidentally correlated through a
+    # shared RNG state), not merely asserted from probability theory.
+    n = 20000
+    photon_scale = 100.0
+    read_noise_std = 0.03
+
+    shot = get_tool("add_shot_noise").fn(image_intensity=[1.0] * n, photon_scale=photon_scale, seed=1)
+    shot_only = np.array(shot.value["noisy_intensity"])
+    var_shot = shot_only.var()
+
+    combined = get_tool("add_read_noise").fn(
+        image_intensity=shot.value["noisy_intensity"], read_noise_std=read_noise_std, seed=2
+    )
+    var_combined = np.array(combined.value["noisy_intensity"]).var()
+
+    expected = var_shot + read_noise_std**2
+    rel_err = abs(var_combined - expected) / expected
+    assert rel_err < 0.05, f"Var[shot+read] should equal Var[shot]+read_std^2: {var_combined} vs {expected}"
+
+
 def test_shot_noise_full_pipeline_object_to_noisy_image():
     # End-to-end: a real object, imaged through the diffraction-limited
     # incoherent system, then corrupted by real shot noise -- the actual
@@ -72,3 +117,9 @@ def test_shot_noise_full_pipeline_object_to_noisy_image():
     )
     assert noisy.in_validated_region is True, noisy.diagnostic
     assert len(noisy.value["noisy_intensity"]) == n_x
+
+    final = get_tool("add_read_noise").fn(
+        image_intensity=noisy.value["noisy_intensity"], read_noise_std=0.01, seed=8
+    )
+    assert final.in_validated_region is True, final.diagnostic
+    assert len(final.value["noisy_intensity"]) == n_x

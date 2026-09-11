@@ -350,11 +350,11 @@ HoloForge must not become a general optics engine. Deliberately narrow
 everything at once) — Stage 1 (fields), Stage 2 (propagation), most of
 Stage 3 (apertures, thin lens, grating), the core of Stage 4 (idealized
 4f-system spatial filtering), one Stage 5 case (Young's double slit), and
-now three pieces of master-build Milestone 5 (a diffraction-limited
+now four pieces of master-build Milestone 5 (a diffraction-limited
 incoherent imaging system's PSF/OTF/MTF, actually imaging an object
-through it end to end, and applying real Poisson shot noise to the
-result), each with a real, independently-verified analytic/statistical
-reference case per §28.
+through it end to end, and applying real Poisson shot noise plus
+Gaussian read noise to the result), each with a real,
+independently-verified analytic/statistical reference case per §28.
 
 | Tool | computed | exposed | typed | tested | documented | validity-bounded |
 |---|---|---|---|---|---|---|
@@ -372,8 +372,9 @@ reference case per §28.
 | `compute_incoherent_psf_otf` | ✓ (1D rect pupil only) | ✓ | ✓ | ✓ | ✓ | ✓ (OTF cutoff vs. grid Nyquist frequency) |
 | `image_through_incoherent_system` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (same OTF-cutoff-vs-Nyquist check) |
 | `add_shot_noise` | ✓ (Poisson only) | ✓ | ✓ | ✓ | ✓ | ✓ (SNR=sqrt(mean count) vs. a stated 3.0 floor) |
+| `add_read_noise` | ✓ (Gaussian, fixed std) | ✓ | ✓ | ✓ | ✓ | ✓ (mean-signal/read-noise-std vs. a stated 3.0 floor) |
 
-**Eight analytic validations plus two statistical ones, all run through
+**Eight analytic validations plus four statistical ones, all run through
 the actual registered tools (not the underlying physics functions in
 isolation)** — `tests/test_waveoptics_propagation.py`,
 `tests/test_waveoptics_imaging.py`, and `tests/test_waveoptics_noise.py`:
@@ -478,6 +479,19 @@ isolation)** — `tests/test_waveoptics_propagation.py`,
    matches the `1/sqrt(photon_scale)` scaling law to <10%. A third check
    (not statistical, but a real reproducibility property): the same seed
    produces bit-identical noisy output across two separate tool calls.
+10. `add_read_noise` (Milestone 5, fourth slice — additive Gaussian
+    sensor-electronics noise, physically distinct from Poisson shot noise:
+    FIXED standard deviation, independent of signal level, rather than
+    shrinking as `1/sqrt(signal)`): its own two statistical checks — the
+    added noise has sample mean ~0 and sample std matching
+    `read_noise_std` to <5% (n=20000 i.i.d. pixels) — plus the real
+    physical identity that ties it to `add_shot_noise`: two independent
+    noise sources' variances *add*, so
+    `Var[shot+read] = Var[shot] + read_noise_std²`, checked directly by
+    composing both tools and comparing the combined sample variance
+    against that sum, matched to <5%. This also confirms the two RNG
+    draws (one per tool call) are genuinely independent rather than
+    accidentally correlated through shared state.
 
 **A real bug caught by the second validation, not assumed away:** the
 first Nyquist-sampling check written for `propagate_angular_spectrum`
@@ -519,13 +533,16 @@ peaks; not pursued further this session). `compute_incoherent_psf_otf`
 and `image_through_incoherent_system` are 1D and a hard-edged rect pupil
 only — no 2D circular pupil (so no formal Airy-disk-based Rayleigh
 criterion, consistent with this domain's 1D-only convention throughout),
-no soft/apodized pupils. `add_shot_noise` covers only Poisson (shot)
-noise — no additive Gaussian read noise (a real, physically distinct
-sensor-electronics noise source; a real detector's total noise is
-shot+read combined, not shot alone), no dark current, no fixed-pattern
-noise, no analog-to-digital quantization. No coherence (partial/spatial
-coherence) or phase retrieval — the remainder of Stage 4, the remainder
-of Stage 5, and the rest of Milestone 5 plus Milestones 6-8 generally.
+no soft/apodized pupils. `add_shot_noise` and `add_read_noise` cover
+shot and read noise — the two dominant real sensor noise sources — but
+not dark current or fixed-pattern noise (both signal-independent, additive
+biases rather than random fluctuations — a different kind of correction
+than either tool models), no analog-to-digital quantization, and no
+single tool that applies both together (a caller composes the two tool
+calls themselves, as `tests/test_waveoptics_noise.py`'s pipeline test
+does). No coherence (partial/spatial coherence) or phase retrieval — the
+remainder of Stage 4, the remainder of Stage 5, and the rest of
+Milestone 5 plus Milestones 6-8 generally.
 
 This domain is deliberately NOT auto-loaded by `holoagent.tools`'s
 backward-compatible default (see that module's docstring) — it's a
