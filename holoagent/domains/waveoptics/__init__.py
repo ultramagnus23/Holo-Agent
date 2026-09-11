@@ -12,7 +12,8 @@ exactly what that covers today and what it explicitly does not (no true
 2D circular aperture / Airy-pattern case yet -- this domain is 1D
 transverse fields only, matching the holoforge domain's own convention;
 no general/arbitrary phase masks, N>2 multi-slit arrays, 2D
-imaging/circular pupils, coherence, or phase retrieval yet).
+imaging/circular pupils, coherence, phase retrieval, or sensor read
+noise yet).
 
 Layout:
   fields.py         create_plane_wave / create_gaussian_beam physics
@@ -26,8 +27,11 @@ Layout:
                      of a diffraction-limited incoherent imaging system) /
                      image_through_incoherent_system (convolve a real
                      object intensity through that system) physics
+  noise.py            add_shot_noise (Poisson/shot noise -- the noiseless
+                     image_through_incoherent_system output is not what
+                     any real detector measures) physics
   serialization.py   JSON <-> complex-array field representation
-  tools/             T1-T13 (waveoptics numbering restarts at its own T1;
+  tools/             T1-T14 (waveoptics numbering restarts at its own T1;
                      these are NOT the same T-numbers as the holoforge
                      domain's T1-T12 -- tool identity is by registered
                      name, not number, across domains)
@@ -47,4 +51,5 @@ from holoagent.domains.waveoptics.tools import (  # noqa: F401  (registration si
     apply_double_slit,
     compute_incoherent_psf_otf,
     image_through_incoherent_system,
+    add_shot_noise,
 )

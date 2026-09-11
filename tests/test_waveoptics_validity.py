@@ -212,3 +212,25 @@ def test_image_through_incoherent_system_cutoff_within_nyquist_is_valid():
     )
     assert result.in_validated_region is True
     assert result.diagnostic is None
+
+
+def test_shot_noise_low_photon_count_is_flagged_noise_dominated():
+    result = get_tool("add_shot_noise").fn(image_intensity=[1.0] * 100, photon_scale=1.0, seed=0)
+    assert result.in_validated_region is False
+    assert "dominates" in result.diagnostic
+
+
+def test_shot_noise_high_photon_count_is_valid():
+    result = get_tool("add_shot_noise").fn(image_intensity=[1.0] * 100, photon_scale=1000.0, seed=0)
+    assert result.in_validated_region is True
+    assert result.diagnostic is None
+
+
+def test_shot_noise_negative_intensity_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("add_shot_noise").fn(image_intensity=[-1.0, 1.0], photon_scale=10.0)
+
+
+def test_shot_noise_nonpositive_photon_scale_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("add_shot_noise").fn(image_intensity=[1.0, 1.0], photon_scale=0.0)

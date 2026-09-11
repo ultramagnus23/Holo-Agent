@@ -350,10 +350,11 @@ HoloForge must not become a general optics engine. Deliberately narrow
 everything at once) — Stage 1 (fields), Stage 2 (propagation), most of
 Stage 3 (apertures, thin lens, grating), the core of Stage 4 (idealized
 4f-system spatial filtering), one Stage 5 case (Young's double slit), and
-now two pieces of master-build Milestone 5 (a diffraction-limited
-incoherent imaging system's PSF/OTF/MTF, plus actually imaging an object
-through it end to end), each with a real, independently-verified
-analytic reference case per §28.
+now three pieces of master-build Milestone 5 (a diffraction-limited
+incoherent imaging system's PSF/OTF/MTF, actually imaging an object
+through it end to end, and applying real Poisson shot noise to the
+result), each with a real, independently-verified analytic/statistical
+reference case per §28.
 
 | Tool | computed | exposed | typed | tested | documented | validity-bounded |
 |---|---|---|---|---|---|---|
@@ -370,11 +371,12 @@ analytic reference case per §28.
 | `apply_double_slit` | ✓ (2 identical hard-edged slits) | ✓ | ✓ | ✓ | ✓ | ✓ (total extent vs. grid extent) |
 | `compute_incoherent_psf_otf` | ✓ (1D rect pupil only) | ✓ | ✓ | ✓ | ✓ | ✓ (OTF cutoff vs. grid Nyquist frequency) |
 | `image_through_incoherent_system` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (same OTF-cutoff-vs-Nyquist check) |
+| `add_shot_noise` | ✓ (Poisson only) | ✓ | ✓ | ✓ | ✓ | ✓ (SNR=sqrt(mean count) vs. a stated 3.0 floor) |
 
-**Eight analytic validations, all run through the actual registered tools
-(not the underlying physics functions in isolation)** —
-`tests/test_waveoptics_propagation.py` and
-`tests/test_waveoptics_imaging.py`:
+**Eight analytic validations plus two statistical ones, all run through
+the actual registered tools (not the underlying physics functions in
+isolation)** — `tests/test_waveoptics_propagation.py`,
+`tests/test_waveoptics_imaging.py`, and `tests/test_waveoptics_noise.py`:
 
 1. A plane wave through a slit aperture, propagated to the far field via
    `propagate_fraunhofer`, reproduces the exact analytic sinc² single-slit
@@ -465,6 +467,17 @@ analytic reference case per §28.
    within `(fc, 2·fc)` still forms a (contrast-reduced) image under this
    system, even though it's beyond what the *coherent* cutoff alone
    would resolve.
+9. `add_shot_noise` (Milestone 5, third slice — the noise model flagged
+   as missing after the previous commit, since a real detector never
+   measures the exact noiseless convolution `image_through_incoherent_
+   system` produces): Poisson shot noise, validated statistically on the
+   tool's own random output rather than assumed from the textbook
+   distribution — across n=20000 i.i.d. pixels of a flat image, the
+   sample variance/mean ratio matches the Poisson identity `Var=mean` to
+   <5%; and the relative noise magnitude at two different signal levels
+   matches the `1/sqrt(photon_scale)` scaling law to <10%. A third check
+   (not statistical, but a real reproducibility property): the same seed
+   produces bit-identical noisy output across two separate tool calls.
 
 **A real bug caught by the second validation, not assumed away:** the
 first Nyquist-sampling check written for `propagate_angular_spectrum`
@@ -506,11 +519,13 @@ peaks; not pursued further this session). `compute_incoherent_psf_otf`
 and `image_through_incoherent_system` are 1D and a hard-edged rect pupil
 only — no 2D circular pupil (so no formal Airy-disk-based Rayleigh
 criterion, consistent with this domain's 1D-only convention throughout),
-no soft/apodized pupils. No noise model (the simulated image is the
-exact, noiseless convolution result — no sensor noise, no quantization).
-No coherence (partial/spatial coherence) or phase retrieval — the
-remainder of Stage 4, the remainder of Stage 5, and the rest of
-Milestone 5 plus Milestones 6-8 generally.
+no soft/apodized pupils. `add_shot_noise` covers only Poisson (shot)
+noise — no additive Gaussian read noise (a real, physically distinct
+sensor-electronics noise source; a real detector's total noise is
+shot+read combined, not shot alone), no dark current, no fixed-pattern
+noise, no analog-to-digital quantization. No coherence (partial/spatial
+coherence) or phase retrieval — the remainder of Stage 4, the remainder
+of Stage 5, and the rest of Milestone 5 plus Milestones 6-8 generally.
 
 This domain is deliberately NOT auto-loaded by `holoagent.tools`'s
 backward-compatible default (see that module's docstring) — it's a
