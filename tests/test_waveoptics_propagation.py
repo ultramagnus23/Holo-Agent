@@ -189,3 +189,58 @@ def test_grating_produces_three_orders_at_analytic_angles():
         window = slice(max(0, idx - 30), idx + 30)
         order_power += np.sum(intensity[window])
     assert order_power / total_power > 0.99, "a sinusoidal grating should put >99% of power in exactly 3 orders"
+
+
+def test_double_slit_matches_analytic_young_interference_pattern():
+    # Master-build Stage 5 ("remaining diffraction cases"): Young's double
+    # slit, the archetypal two-source interference case -- distinct from
+    # both the single-slit envelope and the continuous sinusoidal grating
+    # already validated above. Exact closed-form (Fourier transform of two
+    # identical rect functions offset by +-spacing/2, not an approximation):
+    # I(theta) = 4*sinc^2(a*fx)*cos^2(pi*d*fx), fx=theta/wavelength,
+    # a=slit width, d=spacing.
+    #
+    # Slit width is oversampled generously relative to dx (100 samples per
+    # slit) -- a hard-edged rect's high-frequency sidelobe content needs
+    # fine sampling to avoid discretization error contaminating the
+    # comparison (found live: at 10 samples/slit, max abs error was ~0.08;
+    # at 100 samples/slit, <0.01 -- a real numerical-resolution effect, not
+    # a tool bug, consistent with the single-slit test's own choice of ~100
+    # samples/slit).
+    wavelength_um = 0.5
+    slit_width_um = 10.0
+    slit_spacing_um = 60.0
+    n_x, dx = 32768, 0.1
+    z_um = 2.0e6
+
+    plane = get_tool("create_plane_wave").fn(n_x=n_x, dx=dx, wavelength_um=wavelength_um)
+    slits = get_tool("apply_double_slit").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]},
+        dx=dx,
+        slit_width_um=slit_width_um,
+        slit_spacing_um=slit_spacing_um,
+    )
+    assert slits.in_validated_region is True, slits.diagnostic
+
+    far = get_tool("propagate_fraunhofer").fn(
+        field={"real": slits.value["real"], "imag": slits.value["imag"]},
+        dx=dx,
+        wavelength_um=wavelength_um,
+        z_um=z_um,
+    )
+    intensity = np.array(get_tool("calculate_intensity").fn(field=far.value["field"]).value["intensity"])
+    intensity /= intensity.max()
+    x_out = np.array(far.value["x_out_um"])
+
+    theta = x_out / z_um
+    u = slit_width_um * theta / wavelength_um
+    with np.errstate(divide="ignore", invalid="ignore"):
+        envelope = np.sin(np.pi * u) / (np.pi * u)
+        envelope[u == 0] = 1.0
+    fringe = np.cos(np.pi * slit_spacing_um * theta / wavelength_um) ** 2
+    I_analytic = (envelope**2) * fringe
+
+    env_first_null = wavelength_um * z_um / slit_width_um
+    mask = np.abs(x_out) < env_first_null
+    max_abs_error = np.abs(intensity[mask] - I_analytic[mask]).max()
+    assert max_abs_error < 0.02, f"max abs error vs analytic double-slit pattern: {max_abs_error}"

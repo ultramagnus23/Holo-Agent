@@ -149,3 +149,27 @@ def test_fourier_filter_invalid_filter_type_raises_tool_error():
             cutoff_um_inv=0.1,
             filter_type="bandpass",
         )
+
+
+def test_double_slit_exceeding_grid_extent_is_flagged():
+    plane = get_tool("create_plane_wave").fn(n_x=64, dx=1.0, wavelength_um=0.5)
+    result = get_tool("apply_double_slit").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]},
+        dx=1.0,
+        slit_width_um=5.0,
+        slit_spacing_um=100.0,
+    )
+    assert result.in_validated_region is False
+    assert result.distance_from_bounds is not None
+
+
+def test_double_slit_within_grid_extent_is_valid():
+    plane = get_tool("create_plane_wave").fn(n_x=256, dx=1.0, wavelength_um=0.5)
+    result = get_tool("apply_double_slit").fn(
+        field={"real": plane.value["real"], "imag": plane.value["imag"]},
+        dx=1.0,
+        slit_width_um=5.0,
+        slit_spacing_um=30.0,
+    )
+    assert result.in_validated_region is True
+    assert result.diagnostic is None

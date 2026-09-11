@@ -1,12 +1,13 @@
 """Optical elements: amplitude/phase masks applied to a field (master-build
-§13 Stage 3). apply_rect_aperture, apply_thin_lens, apply_grating are built;
-see docs/tool_coverage_matrix.md for what's still explicitly not built:
-general/arbitrary phase masks and a true 2D circular aperture (this domain
-is 1D transverse fields only, matching the holoforge domain's own
-convention -- a 1D "circular" slit of some half-width would NOT reproduce
-the Airy pattern the master prompt's §28 names, since that needs real 2D
-radial symmetry; rather than build a mislabeled stand-in, that validation
-case is not attempted here at all).
+§13 Stages 3 and 5). apply_rect_aperture, apply_thin_lens, apply_grating,
+apply_double_slit are built; see docs/tool_coverage_matrix.md for what's
+still explicitly not built: general/arbitrary phase masks, N>2 multi-slit
+arrays, and a true 2D circular aperture (this domain is 1D transverse
+fields only, matching the holoforge domain's own convention -- a 1D
+"circular" slit of some half-width would NOT reproduce the Airy pattern
+the master prompt's §28 names, since that needs real 2D radial symmetry;
+rather than build a mislabeled stand-in, that validation case is not
+attempted here at all).
 """
 
 from __future__ import annotations
@@ -42,6 +43,27 @@ def apply_thin_lens(field: np.ndarray, dx: float, wavelength_um: float, focal_le
     k = 2 * np.pi / wavelength_um
     lens_phase = np.exp(-1j * k * x**2 / (2 * focal_length_um))
     return field * lens_phase
+
+
+def apply_double_slit(field: np.ndarray, dx: float, slit_width_um: float, slit_spacing_um: float) -> np.ndarray:
+    """Two identical hard-edged 1D slits (Young's double slit), centered on
+    the grid, separated center-to-center by slit_spacing_um. Master-build
+    §13 Stage 5 ("remaining diffraction cases") -- distinct from both
+    apply_rect_aperture (one slit) and apply_grating (a continuous
+    sinusoidal transmission, no discrete edges): this is the archetypal
+    two-source interference case.
+
+    Validated (tests/test_waveoptics_imaging.py) against the exact
+    closed-form Fraunhofer double-slit pattern I(theta) =
+    4*sinc^2(a*fx)*cos^2(pi*d*fx) (fx=sin(theta)/wavelength, a=slit width,
+    d=spacing) -- the Fourier transform of two identical rect functions
+    offset by +-d/2, an exact analytic identity, not an approximation.
+    """
+    n_x = len(field)
+    x = make_x_axis(n_x, dx)
+    half_spacing = slit_spacing_um / 2.0
+    mask = (np.abs(x - half_spacing) <= slit_width_um / 2) | (np.abs(x + half_spacing) <= slit_width_um / 2)
+    return field * mask.astype(complex)
 
 
 def apply_grating(field: np.ndarray, dx: float, period_um: float) -> np.ndarray:

@@ -165,19 +165,21 @@ progress. Done so far:
   separation; core no longer knows HoloForge exists.
 - **Milestone 4, started** — a second domain,
   `holoagent/domains/waveoptics/` (general scalar wave optics,
-  independent of HoloForge per §12's explicit instruction). 10 tools
+  independent of HoloForge per §12's explicit instruction). 11 tools
   (fields, propagation, aperture, thin lens, grating, Fourier-plane
-  filter), 5 real analytic validations (Fraunhofer sinc² diffraction,
-  Gaussian-beam w(z) divergence via the exact angular-spectrum method,
-  the Fourier-transforming-lens identity, sinusoidal-grating diffraction
-  orders, and the exact rect↔sinc Fourier pair for an idealized 4f
-  imaging system's spatial filter) — see `docs/tool_coverage_matrix.md`'s
+  filter, double slit), 6 real analytic validations (Fraunhofer sinc²
+  diffraction, Gaussian-beam w(z) divergence via the exact
+  angular-spectrum method, the Fourier-transforming-lens identity,
+  sinusoidal-grating diffraction orders, the exact rect↔sinc Fourier pair
+  for an idealized 4f imaging system's spatial filter, and Young's
+  double-slit interference pattern) — see `docs/tool_coverage_matrix.md`'s
   Milestone 4 section for exactly what's covered and what's explicitly
   not (no 2D circular aperture/Airy pattern, no general/arbitrary phase
   masks, no soft/apodized filters or a first-class PSF/OTF/MTF tool, no
-  2D imaging/coherence/phase-retrieval yet). Deliberately not auto-loaded
-  into the default HoloForge-focused orchestrator session — using it
-  means an explicit `import holoagent.domains.waveoptics`.
+  general N-slit array, no 2D imaging/coherence/phase-retrieval yet).
+  Deliberately not auto-loaded into the default HoloForge-focused
+  orchestrator session — using it means an explicit
+  `import holoagent.domains.waveoptics`.
 
 Milestones 5-8 (imaging, phase retrieval/holography as a general
 capability, research knowledge, a full research agent) are not started —

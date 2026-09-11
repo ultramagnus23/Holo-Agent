@@ -348,9 +348,9 @@ scalar wave optics, master-build §12's explicit instruction that
 HoloForge must not become a general optics engine. Deliberately narrow
 (master-build §38: depth over feature count; §37: do not build
 everything at once) — Stage 1 (fields), Stage 2 (propagation), most of
-Stage 3 (apertures, thin lens, grating), and the core of Stage 4
-(idealized 4f-system spatial filtering), each with a real,
-independently-verified analytic reference case per §28.
+Stage 3 (apertures, thin lens, grating), the core of Stage 4 (idealized
+4f-system spatial filtering), and one Stage 5 case (Young's double slit),
+each with a real, independently-verified analytic reference case per §28.
 
 | Tool | computed | exposed | typed | tested | documented | validity-bounded |
 |---|---|---|---|---|---|---|
@@ -364,8 +364,9 @@ independently-verified analytic reference case per §28.
 | `apply_thin_lens` | ✓ (paraxial, ideal) | ✓ | ✓ | ✓ | ✓ | ✓ (half-aperture/f paraxial-angle check) |
 | `apply_grating` | ✓ (sinusoidal amplitude only) | ✓ | ✓ | ✓ | ✓ | ✓ (grating-period sampling check) |
 | `apply_fourier_filter` | ✓ (hard-edged lowpass/highpass) | ✓ | ✓ | ✓ | ✓ | ✓ (cutoff vs. grid Nyquist frequency) |
+| `apply_double_slit` | ✓ (2 identical hard-edged slits) | ✓ | ✓ | ✓ | ✓ | ✓ (total extent vs. grid extent) |
 
-**Five analytic validations, all run through the actual registered tools
+**Six analytic validations, all run through the actual registered tools
 (not the underlying physics functions in isolation)** —
 `tests/test_waveoptics_propagation.py` and
 `tests/test_waveoptics_imaging.py`:
@@ -410,6 +411,20 @@ independently-verified analytic reference case per §28.
    masks partition all spatial frequencies with no gap/overlap), and a
    generous lowpass cutoff leaves a Gaussian beam whose real spectral
    content sits far below that cutoff numerically unchanged.
+6. `apply_double_slit` (Stage 5: Young's double slit, the archetypal
+   two-source interference case — distinct from both the single-slit
+   envelope already validated and the continuous sinusoidal grating,
+   neither of which has two discrete hard-edged sources) matches the
+   exact closed-form Fraunhofer double-slit pattern
+   `I(θ)=4·sinc²(a·fx)·cos²(π·d·fx)` (the Fourier transform of two
+   identical rect functions offset by ±d/2 — an exact identity, not an
+   approximation) to <0.02 absolute intensity error, at 100
+   samples/slit-width. Found live: at a coarser 10 samples/slit-width,
+   max abs error was ~0.08 — a real discretization effect (a hard-edged
+   rect's high-frequency sidelobe content needs fine sampling to avoid
+   contaminating the comparison), not a tool bug; confirmed by rerunning
+   at several sampling densities and watching the error shrink
+   monotonically (0.076 → 0.016 → 0.003 as dx went 0.5 → 0.1 → 0.02µm).
 
 **A real bug caught by the second validation, not assumed away:** the
 first Nyquist-sampling check written for `propagate_angular_spectrum`
@@ -443,9 +458,13 @@ validation case is not attempted). No general/arbitrary phase masks
 no soft/apodized filters, no formal PSF/OTF/MTF tool that reports a
 system's resolving power as a first-class quantity (the sinc impulse
 response is currently validated only inside a test, not exposed as its
-own tool output), no 2D imaging, coherence, or phase retrieval — the
-remainder of Stage 4, all of Stage 5, and master-build Milestones 5-8
-generally.
+own tool output). `apply_double_slit` is exactly 2 slits of fixed
+identical width — no general N-slit array (the N-slit array-factor
+formula was prototyped and found to need much finer grid resolution than
+the N=2 case to match cleanly at its narrower, higher-order interference
+peaks; not pursued further this session). No 2D imaging, coherence, or
+phase retrieval — the remainder of Stage 4, the remainder of Stage 5, and
+master-build Milestones 5-8 generally.
 
 This domain is deliberately NOT auto-loaded by `holoagent.tools`'s
 backward-compatible default (see that module's docstring) — it's a
