@@ -44,6 +44,46 @@ selecting by lowest constraint error, brought the normalized field error
 from ~8.6% (single deterministic zero-phase run) down to ~1.1% -- a real
 improvement, not a guaranteed fix (multi-restart reduces but does not
 eliminate the chance every restart lands on a wrong fixed point).
+
+fienup_hio -- a DIFFERENT, genuinely distinct phase-retrieval problem
+from Gerchberg-Saxton above, not just a different solver for the same
+one. GS needs TWO measured intensities (object plane + Fourier plane).
+Fienup's Hybrid Input-Output (HIO) solves the harder, more common
+experimental case: a SINGLE measured Fourier-magnitude (diffraction
+pattern) intensity, plus a known SUPPORT constraint (the object is known
+to be confined to some region, zero outside it) instead of a second
+intensity measurement. Iterates:
+
+    G = FFT(g); G' = sqrt(I_fourier) * exp(i*angle(G)); g' = IFFT(G')
+    inside support (and, if nonnegative=True, g'.real >= 0): g_new = g'
+    elsewhere (constraint VIOLATED): g_new = g - beta*g'
+
+-- the "hybrid" part: on a support/constraint violation, HIO feeds back
+a damped correction (the `g - beta*g'` term) rather than simply zeroing
+the violating region (which is what plain "error reduction," ER, does --
+ER is included here as an optional final-polish phase after HIO, a
+standard combination: HIO for global search, ER to clean up the result
+once it's in the right basin).
+
+Found live, and this is the real, load-bearing distinction the
+docs/tool_coverage_matrix.md gap note flagged before this was built:
+single-pattern phase retrieval is markedly WORSE-conditioned for a
+general COMPLEX-valued object than for a REAL, NON-NEGATIVE one. Tested
+directly, same support/oversampling setup, same iteration budget: a
+smooth real non-negative object (the classic, well-posed Fienup case)
+recovers to 3-6% normalized field error across 5 random seeds (accounting
+for the extra ambiguities single-pattern retrieval carries beyond GS's:
+global phase, spatial shift, and conjugate-inversion -- all resolved by
+brute-force alignment search in the validation, the standard CDI
+evaluation protocol). A general complex-valued object under the exact
+same setup was found to recover only to ~17-25% error even with HIO+ER
+polish and near-perfect constraint satisfaction (constraint error
+~1e-9-1e-13) -- confirming this isn't an optimizer-tuning issue but a
+real information-theoretic one: magnitude-only measurement of a general
+complex object is closer to fundamentally under-determined. `nonnegative`
+therefore defaults to True (the well-posed regime); setting it False is
+supported but the tool's own docstring says so is not expected to
+recover reliably.
 """
 
 from __future__ import annotations
@@ -126,3 +166,66 @@ def gerchberg_saxton(
     return dict(
         field=best_g, fourier_constraint_error=best_error, n_restarts_used=n_restarts, best_restart_index=best_index
     )
+
+
+def fienup_hio(
+    fourier_intensity: np.ndarray,
+    support_mask: np.ndarray,
+    n_iterations_hio: int,
+    n_iterations_er: int = 0,
+    beta: float = 0.9,
+    nonnegative: bool = True,
+    seed: int | None = None,
+) -> dict:
+    if len(fourier_intensity) != len(support_mask):
+        raise ValueError(
+            f"fourier_intensity and support_mask must have the same length, "
+            f"got {len(fourier_intensity)} vs {len(support_mask)}"
+        )
+    if np.any(fourier_intensity < 0):
+        raise ValueError("fourier_intensity must be non-negative")
+    if not np.any(support_mask):
+        raise ValueError("support_mask must have at least one True entry")
+    if n_iterations_hio < 1:
+        raise ValueError(f"n_iterations_hio must be >= 1, got {n_iterations_hio}")
+    if n_iterations_er < 0:
+        raise ValueError(f"n_iterations_er must be >= 0, got {n_iterations_er}")
+    if not (0.0 < beta <= 1.0):
+        raise ValueError(f"beta must be in (0, 1], got {beta}")
+
+    n_x = len(fourier_intensity)
+    support_mask = np.asarray(support_mask, dtype=bool)
+    amp_four = np.sqrt(fourier_intensity)
+    fourier_norm = np.sum(fourier_intensity)
+
+    rng = np.random.default_rng(seed)
+    g = np.zeros(n_x, dtype=complex)
+    n_support = int(support_mask.sum())
+    g[support_mask] = rng.uniform(0.0, 1.0, size=n_support) + (
+        0j if nonnegative else 1j * rng.uniform(-1.0, 1.0, size=n_support)
+    )
+
+    def violates(g_prime: np.ndarray) -> np.ndarray:
+        bad = ~support_mask
+        if nonnegative:
+            bad = bad | (g_prime.real < 0)
+        return bad
+
+    for _ in range(n_iterations_hio):
+        G = np.fft.fft(g)
+        G = amp_four * np.exp(1j * np.angle(G))
+        g_prime = np.fft.ifft(G)
+        bad = violates(g_prime)
+        g = np.where(bad, g - beta * g_prime, g_prime)
+
+    for _ in range(n_iterations_er):
+        G = np.fft.fft(g)
+        G = amp_four * np.exp(1j * np.angle(G))
+        g_prime = np.fft.ifft(G)
+        bad = violates(g_prime)
+        g = np.where(bad, 0.0, g_prime)
+
+    G_final = np.fft.fft(g)
+    constraint_error = float(np.sum((np.abs(G_final) - amp_four) ** 2) / fourier_norm) if fourier_norm > 0 else 0.0
+
+    return dict(field=g, fourier_constraint_error=constraint_error)

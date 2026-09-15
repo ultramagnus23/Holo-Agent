@@ -353,11 +353,12 @@ Stage 3 (apertures, thin lens, grating), the core of Stage 4 (idealized
 four pieces of master-build Milestone 5 (a diffraction-limited
 incoherent imaging system's PSF/OTF/MTF, actually imaging an object
 through it end to end, and applying real Poisson shot noise plus
-Gaussian read noise to the result), and now two pieces of master-build
-Milestone 6 (Gerchberg-Saxton phase retrieval, plus a verified
-multi-restart mitigation for its own non-convex stagnation), each with
-a real, independently-verified analytic/statistical reference case per
-§28.
+Gaussian read noise to the result), and now three pieces of master-build
+Milestone 6 (Gerchberg-Saxton two-intensity phase retrieval, a verified
+multi-restart mitigation for its own non-convex stagnation, and Fienup
+HIO single-pattern-plus-support phase retrieval — a genuinely different
+problem formulation), each with a real, independently-verified
+analytic/statistical reference case per §28.
 
 | Tool | computed | exposed | typed | tested | documented | validity-bounded |
 |---|---|---|---|---|---|---|
@@ -377,13 +378,14 @@ a real, independently-verified analytic/statistical reference case per
 | `add_shot_noise` | ✓ (Poisson only) | ✓ | ✓ | ✓ | ✓ | ✓ (SNR=sqrt(mean count) vs. a stated 3.0 floor) |
 | `add_read_noise` | ✓ (Gaussian, fixed std) | ✓ | ✓ | ✓ | ✓ | ✓ (mean-signal/read-noise-std vs. a stated 3.0 floor) |
 | `retrieve_phase_gerchberg_saxton` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (Fourier-domain constraint error vs. a stated 0.01 floor) |
+| `retrieve_phase_hio` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (same constraint-error floor, applied to the single-pattern problem) |
 
-**Eight analytic validations plus four statistical ones plus three
+**Eight analytic validations plus four statistical ones plus five
 synthetic-ground-truth phase-retrieval cases, all run through the actual
 registered tools (not the underlying physics functions in isolation)** —
 `tests/test_waveoptics_propagation.py`, `tests/test_waveoptics_imaging.py`,
-`tests/test_waveoptics_noise.py`, and
-`tests/test_waveoptics_phase_retrieval.py`:
+`tests/test_waveoptics_noise.py`, `tests/test_waveoptics_phase_retrieval.py`,
+and `tests/test_waveoptics_hio.py`:
 
 1. A plane wave through a slit aperture, propagated to the far field via
    `propagate_fraunhofer`, reproduces the exact analytic sinc² single-slit
@@ -532,6 +534,35 @@ registered tools (not the underlying physics functions in isolation)** —
       (`test_gerchberg_saxton_multi_restart_improves_the_stagnating_
       oscillatory_case`), not merely asserted to help. Reproducible given
       a seed, checked separately.
+12. `retrieve_phase_hio` (Fienup Hybrid Input-Output, master-build
+    Milestone 6 — a genuinely DIFFERENT problem from GS above, not just a
+    different solver: one measured intensity plus a known support
+    constraint, instead of two measured intensities). Evaluated with the
+    standard CDI protocol (`tests/test_waveoptics_hio.py`): single-pattern
+    retrieval carries extra ambiguities beyond GS's global phase — spatial
+    shift and complex-conjugate reflection also leave the Fourier
+    magnitude unchanged — so recovery is scored via a brute-force
+    alignment search over both before comparing to ground truth (the
+    standard evaluation protocol in the phase-retrieval literature).
+    - A real, non-negative compact object (the classic well-posed Fienup
+      case, oversampling ratio ~8.5×) recovers reliably: <10% normalized
+      field error across 5 independent random seeds, using HIO for global
+      search followed by Error-Reduction (ER) polish (a standard
+      combination).
+    - **Found live, kept and reported honestly rather than only the
+      success case:** the identical support/oversampling setup, but with
+      a general COMPLEX-valued object instead of real-non-negative,
+      recovers markedly worse (~17–25% error) even though the Fourier
+      constraint converges to near machine precision (~1e-9–1e-13) — this
+      isn't a solver-tuning artifact (more iterations, different `beta`,
+      and HIO+ER polish were all tried and didn't close the gap); it
+      reflects a real information-theoretic distinction: magnitude-only
+      measurement of a general complex object is far closer to
+      under-determined than of a real non-negative one. `nonnegative`
+      therefore defaults to `True`; the tool's own docstring says setting
+      it `False` is supported but not expected to recover reliably.
+    - Reproducibility checked separately: same seed gives bit-identical
+      output.
 
 **A real bug caught by the second validation, not assumed away:** the
 first Nyquist-sampling check written for `propagate_angular_spectrum`
@@ -580,21 +611,22 @@ biases rather than random fluctuations — a different kind of correction
 than either tool models), no analog-to-digital quantization, and no
 single tool that applies both together (a caller composes the two tool
 calls themselves, as `tests/test_waveoptics_noise.py`'s pipeline test
-does). `retrieve_phase_gerchberg_saxton` is the classic two-INTENSITY
-(object plane + Fourier plane) variant only — no single-diffraction-pattern
-coherent-diffractive-imaging (CDI) variant (which needs an
-explicit support constraint and carries additional trivial ambiguities
-this two-intensity formulation avoids), no Fienup hybrid-input-output
-(HIO) or other variants known to escape GS's stagnation points better
-than random-restart alone. `n_restarts` mitigates but does not eliminate
-the non-uniqueness this session found live — a caller still has no way
-to know, from this tool's own output, whether even the best-of-N result
-is the true phase (only that it's the best-satisfying one tried); a
-result reporting `in_validated_region: True` is a claim about constraint
-satisfaction only, always. No coherence (partial/spatial
-coherence) — the remainder of Stage 4, the remainder of Stage 5, the
-rest of Milestone 5, the rest of Milestone 6, and Milestones 7-8
-generally.
+does). `retrieve_phase_gerchberg_saxton` (two-intensity) and
+`retrieve_phase_hio` (single-pattern-plus-support) cover the two classic
+problem formulations, but neither tool's `n_restarts`/multi-restart
+mechanism eliminates the underlying non-uniqueness this session found
+live in both — a caller has no way to know, from either tool's output
+alone, whether even the best-satisfying result is the true phase (only
+that it's the best-satisfying one tried); a result reporting
+`in_validated_region: True` is always a claim about constraint
+satisfaction only, never about uniqueness. `retrieve_phase_hio` has no
+2D support constraint (this domain is 1D throughout), no adaptive
+shrink-wrap support estimation (the support must be supplied, not
+discovered), and no other Fienup-family variants (RAAR, difference-map,
+etc.) known to handle some cases HIO alone doesn't. No coherence
+(partial/spatial coherence) — the remainder of Stage 4, the remainder
+of Stage 5, the rest of Milestone 5, the rest of Milestone 6, and
+Milestones 7-8 generally.
 
 This domain is deliberately NOT auto-loaded by `holoagent.tools`'s
 backward-compatible default (see that module's docstring) — it's a

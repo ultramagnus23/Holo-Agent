@@ -217,13 +217,26 @@ progress. Done so far:
   either way: it reports constraint satisfaction (the only thing
   checkable at inference time, since the true phase is what's being
   solved for), and never claims unique phase recovery even in
-  multi-restart mode. See `docs/tool_coverage_matrix.md` for what's not
-  built (single-pattern CDI, Fienup HIO).
+  multi-restart mode. Also `retrieve_phase_hio`, Fienup's Hybrid
+  Input-Output algorithm — a genuinely different phase-retrieval
+  problem: a single measured diffraction pattern plus a known support
+  constraint, instead of two measured intensities. Evaluated with the
+  standard CDI protocol (alignment search over the shift and
+  conjugate-reflection ambiguities single-pattern retrieval carries
+  beyond GS's global-phase one): a real, non-negative object (the
+  classic well-posed case) recovers reliably (<10% error across 5
+  seeds); the identical setup with a general complex-valued object was
+  **found live** to recover markedly worse (~17-25% error) even at
+  near-machine-precision constraint satisfaction — a real
+  information-theoretic distinction, not a solver-tuning issue, so
+  `nonnegative` defaults to the well-posed case. See
+  `docs/tool_coverage_matrix.md` for what's not built (2D support,
+  adaptive shrink-wrap support estimation, other Fienup-family variants).
 
-`holoagent.domains.waveoptics` (16 tools total across Milestones 4-6, 9
-analytic + 4 statistical validations, of which 3 are the phase-retrieval
-ground-truth cases) is deliberately not auto-loaded into the default
-HoloForge-focused orchestrator session — using it means an explicit
+`holoagent.domains.waveoptics` (17 tools total across Milestones 4-6, 9
+analytic + 4 statistical + 5 phase-retrieval ground-truth validations)
+is deliberately not auto-loaded into the default HoloForge-focused
+orchestrator session — using it means an explicit
 `import holoagent.domains.waveoptics`.
 
 The rest of Milestones 5 and 6, and Milestones 7-8 (coherence, research

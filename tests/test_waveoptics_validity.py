@@ -303,3 +303,57 @@ def test_gerchberg_saxton_zero_restarts_raises_tool_error():
         get_tool("retrieve_phase_gerchberg_saxton").fn(
             object_intensity=[1.0, 1.0], fourier_intensity=[1.0, 1.0], n_iterations=10, n_restarts=0
         )
+
+
+def test_hio_insufficient_iterations_is_flagged_unconverged():
+    n_x, width = 256, 40
+    support_start = n_x // 2 - width // 2
+    support_mask = [False] * n_x
+    for i in range(support_start, support_start + width):
+        support_mask[i] = True
+    xs = np.arange(width)
+    amp = np.exp(-((xs - width / 2) ** 2) / (2 * 8.0**2))
+    g_true = np.zeros(n_x, dtype=complex)
+    g_true[support_start : support_start + width] = amp * np.exp(1j * 0.4 * np.sin(2 * np.pi * xs / 12.0))
+    fourier_intensity = (np.abs(np.fft.fft(g_true)) ** 2).tolist()
+
+    result = get_tool("retrieve_phase_hio").fn(
+        fourier_intensity=fourier_intensity, support_mask=support_mask, n_iterations_hio=1, nonnegative=False
+    )
+    assert result.in_validated_region is False
+    assert "constraint error" in result.diagnostic
+
+
+def test_hio_length_mismatch_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("retrieve_phase_hio").fn(
+            fourier_intensity=[1.0, 1.0, 1.0], support_mask=[True, True], n_iterations_hio=10
+        )
+
+
+def test_hio_all_false_support_mask_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("retrieve_phase_hio").fn(
+            fourier_intensity=[1.0, 1.0], support_mask=[False, False], n_iterations_hio=10
+        )
+
+
+def test_hio_negative_intensity_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("retrieve_phase_hio").fn(
+            fourier_intensity=[-1.0, 1.0], support_mask=[True, False], n_iterations_hio=10
+        )
+
+
+def test_hio_zero_hio_iterations_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("retrieve_phase_hio").fn(
+            fourier_intensity=[1.0, 1.0], support_mask=[True, False], n_iterations_hio=0
+        )
+
+
+def test_hio_beta_out_of_range_raises_tool_error():
+    with pytest.raises(ToolError):
+        get_tool("retrieve_phase_hio").fn(
+            fourier_intensity=[1.0, 1.0], support_mask=[True, False], n_iterations_hio=10, beta=1.5
+        )

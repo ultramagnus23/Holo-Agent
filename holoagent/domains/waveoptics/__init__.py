@@ -12,8 +12,9 @@ exactly what that covers today and what it explicitly does not (no true
 2D circular aperture / Airy-pattern case yet -- this domain is 1D
 transverse fields only, matching the holoforge domain's own convention;
 no general/arbitrary phase masks, N>2 multi-slit arrays, 2D
-imaging/circular pupils, or coherence yet; phase retrieval now has an
-initial slice, see below).
+imaging/circular pupils, or coherence yet; phase retrieval now covers
+both the two-intensity (GS) and single-pattern-plus-support (HIO)
+problem formulations).
 
 Layout:
   fields.py         create_plane_wave / create_gaussian_beam physics
@@ -32,9 +33,11 @@ Layout:
                      the noiseless image_through_incoherent_system output
                      is not what any real detector measures
   phase_retrieval.py  gerchberg_saxton (Milestone 6: classic two-
-                     intensity iterative phase retrieval) physics
+                     intensity iterative phase retrieval) / fienup_hio
+                     (single-pattern-plus-support-constraint phase
+                     retrieval, a genuinely different problem) physics
   serialization.py   JSON <-> complex-array field representation
-  tools/             T1-T16 (waveoptics numbering restarts at its own T1;
+  tools/             T1-T17 (waveoptics numbering restarts at its own T1;
                      these are NOT the same T-numbers as the holoforge
                      domain's T1-T12 -- tool identity is by registered
                      name, not number, across domains)
@@ -57,4 +60,5 @@ from holoagent.domains.waveoptics.tools import (  # noqa: F401  (registration si
     add_shot_noise,
     add_read_noise,
     retrieve_phase_gerchberg_saxton,
+    retrieve_phase_hio,
 )
